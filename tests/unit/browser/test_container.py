@@ -17,3 +17,9 @@ def test_cli_has_browser_serve_command() -> None:
     assert args.command == "browser"
     assert args.browser_command == "serve"
     assert str(args.profile) == "/data/profile"
+
+
+def test_browser_image_installs_playwright_ffmpeg_for_video_capture() -> None:
+    dockerfile = (ROOT / "browser/Dockerfile").read_text(encoding="utf-8")
+    assert "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in dockerfile
+    assert "python -m playwright install ffmpeg" in dockerfile

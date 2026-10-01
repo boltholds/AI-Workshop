@@ -6,6 +6,7 @@ from uuid import uuid4
 from PIL import Image
 from pydantic import BaseModel
 
+from ai_workshop.browser.artifacts import ArtifactRef
 from ai_workshop.browser.regions import (
     CaptureRegion,
     CoordinateRegion,
@@ -13,14 +14,6 @@ from ai_workshop.browser.regions import (
     SelectorRegion,
 )
 from ai_workshop.browser.runtime import BrowserRuntime
-
-
-class ArtifactRef(BaseModel):
-    id: str
-    media_type: str
-    path: str
-    width: int
-    height: int
 
 
 class ScreenshotRequest(BaseModel):
