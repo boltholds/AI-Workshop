@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let AI Workshop run and control isolated local application infrastructure, including project services, a pinned self-hosted Supabase stack, and a dedicated Titan configuration, without mounting the host Docker socket into agent containers.
+**Goal:** Let AI Workshop run and control arbitrary isolated local application infrastructure from declarative service profiles, without mounting the host Docker socket into agent containers; Supabase and Titan are optional example adapters/profiles.
 
-**Architecture:** Docker lifecycle commands are owned directly by the host-side MCP/control gateway through a `ComposeController` that accepts only prevalidated service IDs and emits fixed Docker Compose argv. There is no Docker control API exposed to containers and no host Docker socket mount. Project service definitions are configuration-driven; the official self-hosted Supabase Compose bundle is fetched at a pinned release into private Workshop state rather than hand-reimplemented.
+**Architecture:** Docker lifecycle commands are owned directly by the host-side MCP/control gateway through a `ComposeController` that accepts only prevalidated service/profile IDs and emits fixed Docker Compose argv. There is no Docker control API exposed to containers and no host Docker socket mount. Generic project/service definitions are configuration-driven. Product-specific integrations such as self-hosted Supabase or Titan live as optional adapters/profiles on top of the generic service model.
 
 **Tech Stack:** Python 3.12, Pydantic v2, Docker Compose v2 CLI, pytest, official Supabase self-hosted Docker release.
 
@@ -18,7 +18,7 @@
 - Workshop-specific credentials are stored outside Git.
 - Production credentials are not required for the normal local flow.
 - Individual services can be restarted/rebuilt without destroying browser state or unrelated services.
-- Supabase state is persistent.
+- Persistent state is declared per service/profile; no database vendor is mandatory.
 
 ## Review Focus
 
@@ -108,7 +108,7 @@ git add src/ai_workshop/services config/services.example.yaml tests/unit/service
 git commit -m "feat: add configurable workshop services"
 ```
 
-### Task 3: Pinned self-hosted Supabase bundle
+### Task 3: Optional infrastructure adapters and Supabase reference adapter
 
 **Files:**
 - Create: `src/ai_workshop/supabase/vendor.py`
@@ -119,8 +119,8 @@ git commit -m "feat: add configurable workshop services"
 - Test: `tests/integration/supabase/test_compose_config.py`
 
 **Interfaces:**
-- Consumes: Docker Compose and the external Workshop network.
-- Produces: `vendor_supabase(ref: str, destination: Path) -> VendorManifest` and a locally cached official Supabase self-hosted Compose bundle.
+- Consumes: generic service/profile model, Docker Compose, and the external Workshop network.
+- Produces: an adapter contract for vendored/external stacks plus `vendor_supabase(ref: str, destination: Path) -> VendorManifest` as the first reference implementation.
 
 - [ ] **Step 1: Write failing vendor tests**
 
@@ -150,7 +150,7 @@ git add src/ai_workshop/supabase infrastructure/supabase config/supabase.version
 git commit -m "feat: add pinned local supabase stack"
 ```
 
-### Task 4: Titan and project-service control through MCP
+### Task 4: Generic project-service control through MCP
 
 **Files:**
 - Create: `src/ai_workshop/gateway/service_tools.py`
@@ -171,9 +171,9 @@ Assert only registered services are visible/actionable, logs are bounded, and no
 
 Call the in-process `ComposeController` from the host-side gateway and map controller failures to structured MCP errors.
 
-- [ ] **Step 3: Add Titan example configuration**
+- [ ] **Step 3: Add generic profile examples plus optional Titan example**
 
-Document a dedicated `TITAN_API_TOKEN` in local secret config, local database/Supabase URLs, and a configurable project build context. Keep actual token values out of Git.
+Document at least one vendor-neutral multi-service profile and, separately, an optional Titan example using a dedicated `TITAN_API_TOKEN`. Keep all actual token values out of Git.
 
 - [ ] **Step 4: Write `test_titan_restart_is_service_scoped`**
 
