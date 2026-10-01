@@ -27,6 +27,13 @@ def build_parser() -> argparse.ArgumentParser:
     gateway.add_argument("--workspace-url", default=os.getenv("AI_WORKSHOP_WORKSPACE_URL", "http://127.0.0.1:8766"))
     gateway.add_argument("--host", default=os.getenv("AI_WORKSHOP_MCP_HOST", "127.0.0.1"))
     gateway.add_argument("--port", type=int, default=int(os.getenv("AI_WORKSHOP_MCP_PORT", "8765")))
+    gateway.add_argument("--browser-url", default=os.getenv("AI_WORKSHOP_BROWSER_URL"))
+
+    browser = commands.add_parser("browser")
+    browser.add_argument("--profile", type=Path, default=Path("/data/browser-profile"))
+    browser.add_argument("--artifacts", type=Path, default=Path("/data/artifacts"))
+    browser.add_argument("--host", default="0.0.0.0")
+    browser.add_argument("--port", type=int, default=8767)
     return parser
 
 
@@ -46,7 +53,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "gateway":
         from ai_workshop.gateway.server import run_gateway
 
-        run_gateway(args.workspace_url, host=args.host, port=args.port)
+        run_gateway(args.workspace_url, host=args.host, port=args.port, browser_url=args.browser_url)
+        return 0
+    if args.command == "browser":
+        import uvicorn
+        from ai_workshop.browser.app import create_browser_app
+        uvicorn.run(create_browser_app(args.profile, args.artifacts), host=args.host, port=args.port)
         return 0
     return 2
 

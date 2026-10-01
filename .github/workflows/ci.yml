@@ -16,7 +16,20 @@ jobs:
       - name: Install
         run: uv sync
       - name: Test
-        run: uv run pytest tests/unit tests/integration -v
+        run: uv run pytest tests/unit tests/integration --ignore=tests/integration/browser -v
+
+  browser:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.63.0-noble
+      options: --init --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install
+        run: uv sync
+      - name: Browser tests
+        run: uv run pytest tests/unit/browser tests/integration/browser tests/e2e/test_browser_diagnostics.py -v
 
   docker-smoke:
     runs-on: ubuntu-latest
@@ -34,20 +47,21 @@ jobs:
               container: /workspace/fixture
               mode: rw
           YAML
-          uv run ai-workshop compose render \
-            --projects config/projects.local.yaml \
-            --output .workshop/compose.projects.yaml
-      - name: Build and start workspace
+          uv run ai-workshop compose render --projects config/projects.local.yaml --output .workshop/compose.projects.yaml
+      - name: Build and start core services
         run: |
-          docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d --build agent-workspace
-          for i in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:8766/health; then
-              exit 0
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d --build agent-workspace browser
+          for port in 8766 8767; do
+            ok=0
+            for i in $(seq 1 45); do
+              if curl --fail --silent "http://127.0.0.1:${port}/health"; then ok=1; break; fi
+              sleep 2
+            done
+            if [ "$ok" -ne 1 ]; then
+              docker compose -f compose.yaml -f .workshop/compose.projects.yaml logs
+              exit 1
             fi
-            sleep 2
           done
-          docker compose -f compose.yaml -f .workshop/compose.projects.yaml logs agent-workspace
-          exit 1
-      - name: Stop workspace
+      - name: Stop services
         if: always()
         run: docker compose -f compose.yaml -f .workshop/compose.projects.yaml down -v

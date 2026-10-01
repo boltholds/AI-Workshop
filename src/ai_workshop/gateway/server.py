@@ -4,7 +4,7 @@ from ai_workshop.gateway.client import WorkspaceClient
 from ai_workshop.gateway.errors import GatewayError
 
 
-def build_server(workspace_url: str):
+def build_server(workspace_url: str, browser_url: str | None = None):
     from mcp.server.mcpserver import MCPServer
 
     client = WorkspaceClient(workspace_url)
@@ -58,11 +58,15 @@ def build_server(workspace_url: str):
     def git_diff(project_id: str, staged: bool = False) -> str:
         return safe(client.git_diff, project_id, staged=staged)
 
+    if browser_url:
+        from ai_workshop.gateway.browser_client import BrowserClient
+        from ai_workshop.gateway.browser_tools import register_browser_tools
+        register_browser_tools(server, BrowserClient(browser_url))
     return server
 
 
-def run_gateway(workspace_url: str, host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = build_server(workspace_url)
+def run_gateway(workspace_url: str, host: str = "127.0.0.1", port: int = 8765, browser_url: str | None = None) -> None:
+    server = build_server(workspace_url, browser_url=browser_url)
     server.run(
         transport="streamable-http",
         host=host,
