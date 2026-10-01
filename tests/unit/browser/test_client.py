@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 from ai_workshop.gateway.browser_client import BrowserClient
 from ai_workshop.gateway.errors import GatewayError
@@ -66,3 +67,21 @@ def test_browser_client_sanitizes_http_failure_without_workspace_label():
         assert "Workspace" not in exc.message
     else:
         raise AssertionError("expected GatewayError")
+
+
+def test_browser_client_sanitizes_malformed_success_response():
+    def handler(_request: httpx.Request):
+        return httpx.Response(200, content=b"not-json", headers={"content-type": "application/json"})
+    client=BrowserClient("http://browser",token="secret",transport=httpx.MockTransport(handler))
+    with pytest.raises(GatewayError) as exc_info:
+        client.console_events()
+    assert exc_info.value.code == "BROWSER_PROTOCOL_ERROR"
+
+
+def test_browser_client_sanitizes_missing_response_field():
+    def handler(_request: httpx.Request):
+        return httpx.Response(200, json={"unexpected": []})
+    client=BrowserClient("http://browser",token="secret",transport=httpx.MockTransport(handler))
+    with pytest.raises(GatewayError) as exc_info:
+        client.console_events()
+    assert exc_info.value.code == "BROWSER_PROTOCOL_ERROR"
