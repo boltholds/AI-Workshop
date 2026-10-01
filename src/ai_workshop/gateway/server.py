@@ -43,8 +43,8 @@ def build_server(workspace_url: str, *, token: str):
         return safe(client.file_search, project_id, needle, path)
 
     @server.tool()
-    def shell_exec(project_id: str, argv: list[str], env: dict[str, str] | None = None, timeout_seconds: float = 60.0) -> dict[str, object]:
-        return safe(client.shell_exec, project_id, argv, env=env, timeout_seconds=timeout_seconds)
+    def shell_exec(project_id: str, argv: list[str], cwd: str = ".", env: dict[str, str] | None = None, timeout_seconds: float = 60.0) -> dict[str, object]:
+        return safe(client.shell_exec, project_id, argv, cwd=cwd, env=env, timeout_seconds=timeout_seconds)
 
     @server.tool()
     def shell_cancel(run_id: str) -> bool:
