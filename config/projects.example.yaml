@@ -1,0 +1,9 @@
+projects:
+  plc-web:
+    host: "C:/Users/example/Code/PLC-Web"
+    container: /workspace/plc-web
+    mode: rw
+  titan:
+    host: "C:/Users/example/Code/Titan"
+    container: /workspace/titan
+    mode: rw
