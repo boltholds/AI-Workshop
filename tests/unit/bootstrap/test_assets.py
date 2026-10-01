@@ -62,3 +62,9 @@ def test_bootstrap_local_secrets_and_configs_are_gitignored():
     assert "config/projects.local.yaml" in text
     assert "config/services.local.yaml" in text
     assert "config/recovery.local.yaml" in text
+
+
+def test_shell_bootstrap_does_not_execute_env_file():
+    text = read("scripts/bootstrap.sh")
+    assert "source \"$ROOT/.env.local\"" not in text
+    assert "AI_WORKSHOP_*" in text
