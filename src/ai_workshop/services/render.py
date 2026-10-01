@@ -46,6 +46,22 @@ def render_service_override(
         if spec.command is not None:
             rendered["command"] = spec.command
 
+        if spec.environment:
+            rendered["environment"] = dict(spec.environment)
+
+        if spec.env_files:
+            workshop_root = compose_path.parent.parent.resolve()
+            secrets_root = (workshop_root / ".workshop" / "secrets").resolve()
+            env_files: list[str] = []
+            for value in spec.env_files:
+                resolved = (workshop_root / value).resolve()
+                try:
+                    resolved.relative_to(secrets_root)
+                except ValueError as exc:
+                    raise ValueError("env file resolves outside .workshop/secrets") from exc
+                env_files.append(str(resolved))
+            rendered["env_file"] = env_files
+
         published_ports = [
             f"{port.host_ip}:{port.host}:{port.container}"
             for port in spec.ports
