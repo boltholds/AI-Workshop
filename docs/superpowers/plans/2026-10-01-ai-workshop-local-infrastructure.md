@@ -4,17 +4,17 @@
 
 **Goal:** Let AI Workshop run and control isolated local application infrastructure, including project services, a pinned self-hosted Supabase stack, and a dedicated Titan configuration, without mounting the host Docker socket into agent containers.
 
-**Architecture:** Docker lifecycle commands are owned by a small host-side Workshop controller bound to loopback only. MCP calls reach it through a narrow authenticated API with an allowlist of known Workshop services and compose projects. Project service definitions are configuration-driven; the official self-hosted Supabase Compose bundle is fetched at a pinned release into private Workshop state rather than hand-reimplemented.
+**Architecture:** Docker lifecycle commands are owned directly by the host-side MCP/control gateway through a `ComposeController` that accepts only prevalidated service IDs and emits fixed Docker Compose argv. There is no Docker control API exposed to containers and no host Docker socket mount. Project service definitions are configuration-driven; the official self-hosted Supabase Compose bundle is fetched at a pinned release into private Workshop state rather than hand-reimplemented.
 
-**Tech Stack:** Python 3.12, FastAPI, Pydantic v2, Docker Compose v2 CLI, httpx, pytest, official Supabase self-hosted Docker release.
+**Tech Stack:** Python 3.12, Pydantic v2, Docker Compose v2 CLI, pytest, official Supabase self-hosted Docker release.
 
 **Spec:** `docs/superpowers/specs/2026-10-01-ai-workshop-design.md`
 
 ## Global Constraints
 
 - No container may mount the host Docker socket.
-- Host controller must bind to `127.0.0.1` only and accept only Workshop-specific authenticated operations.
-- Service management is limited to configured compose projects/services.
+- The MCP/control gateway binds to `127.0.0.1` by default; any external connector/tunnel is configured separately.
+- Service management is limited to configured compose projects/services and fixed controller operations.
 - Workshop-specific credentials are stored outside Git.
 - Production credentials are not required for the normal local flow.
 - Individual services can be restarted/rebuilt without destroying browser state or unrelated services.
@@ -22,55 +22,49 @@
 
 ## Review Focus
 
-- A caller must not be able to pass an arbitrary compose file path or service name to the host controller; Task 1 adds `test_rejects_unregistered_service`.
-- Controller authentication failure must occur before any Docker command executes; Task 1 adds `test_bad_token_never_invokes_runner`.
+- A caller must not be able to pass an arbitrary compose file path or service name to the Compose controller; Task 1 adds `test_rejects_unregistered_service`.
+- A caller-supplied Docker/Compose flag or shell fragment must never reach the process runner; Task 1 adds `test_rejects_caller_cli_fragments`.
 - A project service with a host path outside configured projects must be rejected; Task 2 adds `test_service_build_context_must_be_registered_project`.
 - Supabase vendor refresh must remain pinned and reproducible rather than silently tracking `master`; Task 3 adds `test_supabase_vendor_requires_pinned_ref`.
 - Restarting Titan must not recreate the browser or database volumes; Task 4 adds `test_titan_restart_is_service_scoped`.
 
 ---
 
-### Task 1: Loopback-only host service controller
+### Task 1: Host-side Compose controller
 
 **Files:**
-- Create: `src/ai_workshop/controller/app.py`
 - Create: `src/ai_workshop/controller/registry.py`
 - Create: `src/ai_workshop/controller/runner.py`
-- Create: `src/ai_workshop/controller/auth.py`
 - Create: `src/ai_workshop/models/services.py`
 - Test: `tests/unit/controller/test_registry.py`
-- Test: `tests/integration/controller/test_api.py`
+- Test: `tests/unit/controller/test_runner.py`
 
 **Interfaces:**
 - Consumes: local service registry config.
-- Produces: loopback API operations `list_services`, `status`, `logs`, `restart`, `rebuild`, and `up` for registered services only.
+- Produces: `ComposeController.list_services()`, `status(service_id)`, `logs(service_id, tail)`, `restart(service_id)`, `rebuild(service_id)`, and `up(service_id)`.
 
-- [ ] **Step 1: Write failing registry tests**
+- [ ] **Step 1: Write failing registry/controller tests**
 
-Cover registered project/service resolution, `test_rejects_unregistered_service`, and rejection of caller-provided compose file overrides.
+Cover registered project/service resolution, `test_rejects_unregistered_service`, rejection of caller-provided compose file overrides, bounded log line count, timeout mapping, and `test_rejects_caller_cli_fragments`.
 
 - [ ] **Step 2: Implement immutable service registry**
 
-Load service IDs to prevalidated compose project, working directory, compose file list, and allowed operation set. The API accepts service IDs, never raw Docker CLI fragments.
+Load service IDs to prevalidated compose project, working directory, compose file list, and allowed operation set. Public methods accept service IDs and typed options only, never raw Docker CLI fragments.
 
-- [ ] **Step 3: Write failing auth/API tests**
+- [ ] **Step 3: Implement Docker Compose runner**
 
-Cover valid bearer token, `test_bad_token_never_invokes_runner`, loopback bind configuration, bounded log line count, and timeout mapping.
+Generate fixed argv arrays such as `docker compose ... restart <registered-service>`; use subprocess argv directly and never execute caller-supplied shell strings.
 
-- [ ] **Step 4: Implement controller API and Docker Compose runner**
+- [ ] **Step 4: Run Task 1 tests**
 
-Generate fixed argv arrays such as `docker compose ... restart <registered-service>`; do not execute caller-supplied shell strings.
-
-- [ ] **Step 5: Run Task 1 tests**
-
-Run: `uv run pytest tests/unit/controller tests/integration/controller -v`  
+Run: `uv run pytest tests/unit/controller -v`  
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/ai_workshop/controller src/ai_workshop/models tests/unit/controller tests/integration/controller
-git commit -m "feat: add bounded host service controller"
+git add src/ai_workshop/controller src/ai_workshop/models tests/unit/controller
+git commit -m "feat: add bounded host compose controller"
 ```
 
 ### Task 2: Project service configuration and Compose generation
@@ -134,7 +128,7 @@ Assert a ref is mandatory, `test_supabase_vendor_requires_pinned_ref`, manifest 
 
 - [ ] **Step 2: Implement pinned Supabase vendor command**
 
-Default `config/supabase.version` to the verified official self-hosted release used during implementation. Fetch only that ref into `.workshop/vendor/supabase`; never silently switch to `master`.
+Set `config/supabase.version` to `self-hosted/v0.8.2`, the current official self-hosted release verified while writing this plan. Fetch only that ref into `.workshop/vendor/supabase`; never silently switch to `master`.
 
 - [ ] **Step 3: Write failing Compose validation test**
 
@@ -159,7 +153,6 @@ git commit -m "feat: add pinned local supabase stack"
 ### Task 4: Titan and project-service control through MCP
 
 **Files:**
-- Create: `src/ai_workshop/gateway/controller_client.py`
 - Create: `src/ai_workshop/gateway/service_tools.py`
 - Modify: `src/ai_workshop/gateway/server.py`
 - Modify: `config/services.example.yaml`
@@ -167,16 +160,16 @@ git commit -m "feat: add pinned local supabase stack"
 - Test: `tests/e2e/test_service_control.py`
 
 **Interfaces:**
-- Consumes: host controller from Task 1 and service registry from Task 2.
+- Consumes: in-process `ComposeController` from Task 1 and service registry from Task 2.
 - Produces: MCP tools `services_list`, `services_status`, `services_logs`, `services_restart`, `services_rebuild`.
 
 - [ ] **Step 1: Write failing MCP service tests**
 
-Assert only registered services are visible/actionable, logs are bounded, and controller auth is injected by the gateway rather than provided by the model.
+Assert only registered services are visible/actionable, logs are bounded, and no tool parameter can inject compose files, Docker flags, or shell fragments.
 
-- [ ] **Step 2: Implement controller MCP client/tools**
+- [ ] **Step 2: Implement service MCP tools**
 
-Map controller failures to structured MCP errors and never expose the controller bearer token in tool outputs.
+Call the in-process `ComposeController` from the host-side gateway and map controller failures to structured MCP errors.
 
 - [ ] **Step 3: Add Titan example configuration**
 
@@ -211,7 +204,7 @@ git commit -m "feat: expose local service control through mcp"
 
 - [ ] **Step 1: Write the E2E infrastructure test**
 
-Start a fixture project service plus Postgres through the controller, verify health, restart only the fixture service, read logs, then stop the fixture stack without removing named data volumes.
+Start a fixture project service plus Postgres through the host gateway's Compose controller, verify health, restart only the fixture service, read logs, then stop the fixture stack without removing named data volumes.
 
 - [ ] **Step 2: Add optional Supabase smoke marker**
 
@@ -222,9 +215,9 @@ When `AI_WORKSHOP_E2E_SUPABASE=1`, start the pinned Supabase stack and wait for 
 Run: `uv run pytest tests/e2e/test_local_infrastructure.py -v`  
 Expected: PASS with Supabase test skipped unless enabled.
 
-- [ ] **Step 4: Document host controller startup and local secrets**
+- [ ] **Step 4: Document host gateway control and local secrets**
 
-Include Windows/macOS/Linux examples, loopback-only security model, Titan token setup, Supabase vendor/update procedure, and how to restart/rebuild one service.
+Include Windows/macOS/Linux examples, loopback-only gateway model, Titan token setup, Supabase vendor/update procedure, and how to restart/rebuild one service.
 
 - [ ] **Step 5: Commit**
 
