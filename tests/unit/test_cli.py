@@ -23,3 +23,13 @@ def test_cli_exposes_browser_and_browser_gateway_options():
     ])
     assert gateway.browser_url == "http://127.0.0.1:8767"
     assert gateway.browser_token == "browser"
+
+
+def test_gateway_accepts_optional_service_registry():
+    parser = build_parser()
+    args = parser.parse_args([
+        "gateway",
+        "--workspace-url", "http://127.0.0.1:8766",
+        "--service-registry", ".workshop/service-registry.yaml",
+    ])
+    assert str(args.service_registry) == ".workshop/service-registry.yaml"
