@@ -106,8 +106,15 @@ def render_service_override(
         document["volumes"] = rendered_volumes
 
     compose_path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    registry_profiles = {
+        profile_id: list(profile.services)
+        for profile_id, profile in sorted(services.profiles.items())
+    }
     registry_path.write_text(
-        yaml.safe_dump({"services": registry_services}, sort_keys=False),
+        yaml.safe_dump(
+            {"profiles": registry_profiles, "services": registry_services},
+            sort_keys=False,
+        ),
         encoding="utf-8",
     )
     return compose_path, registry_path
