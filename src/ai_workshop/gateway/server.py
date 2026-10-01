@@ -11,6 +11,8 @@ def build_server(
     browser_url: str | None = None,
     browser_token: str | None = None,
     service_controller=None,
+    state_snapshot_service=None,
+    reset_service=None,
 ):
     from mcp.server.mcpserver import MCPServer
 
@@ -65,6 +67,14 @@ def build_server(
     def git_diff(project_id: str, staged: bool = False) -> str:
         return safe(client.git_diff, project_id, staged=staged)
 
+    from ai_workshop.gateway.recovery_tools import register_recovery_tools
+    register_recovery_tools(
+        server,
+        client,
+        state_service=state_snapshot_service,
+        reset_service=reset_service,
+    )
+
     if service_controller is not None:
         from ai_workshop.gateway.service_tools import register_service_tools
 
@@ -90,6 +100,8 @@ def run_gateway(
     browser_url: str | None = None,
     browser_token: str | None = None,
     service_controller=None,
+    state_snapshot_service=None,
+    reset_service=None,
 ) -> None:
     server = build_server(
         workspace_url,
@@ -97,6 +109,8 @@ def run_gateway(
         browser_url=browser_url,
         browser_token=browser_token,
         service_controller=service_controller,
+        state_snapshot_service=state_snapshot_service,
+        reset_service=reset_service,
     )
     server.run(
         transport="streamable-http",

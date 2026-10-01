@@ -14,6 +14,9 @@ fi
 
 mkdir -p /home/workshop/.cache
 chown -R "$AI_WORKSHOP_UID:$AI_WORKSHOP_GID" /home/workshop
+if [ -d /state ]; then
+  chown -R "$AI_WORKSHOP_UID:$AI_WORKSHOP_GID" /state
+fi
 export HOME=/home/workshop
 
 exec gosu "$AI_WORKSHOP_UID:$AI_WORKSHOP_GID" ai-workshop "$@"

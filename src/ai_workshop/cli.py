@@ -31,6 +31,13 @@ def build_parser() -> argparse.ArgumentParser:
     workspace.add_argument("--host", default="0.0.0.0")
     workspace.add_argument("--port", type=int, default=8766)
     workspace.add_argument("--token", default=os.getenv("AI_WORKSHOP_WORKSPACE_TOKEN"))
+    workspace.add_argument(
+        "--state",
+        type=Path,
+        default=Path(os.environ["AI_WORKSHOP_STATE_ROOT"])
+        if os.getenv("AI_WORKSHOP_STATE_ROOT")
+        else None,
+    )
 
     gateway = commands.add_parser("gateway")
     gateway.add_argument("--workspace-url", default=os.getenv("AI_WORKSHOP_WORKSPACE_URL", "http://127.0.0.1:8766"))
@@ -53,6 +60,27 @@ def build_parser() -> argparse.ArgumentParser:
     browser.add_argument("--host", default="0.0.0.0")
     browser.add_argument("--port", type=int, default=8767)
     browser.add_argument("--token", default=os.getenv("AI_WORKSHOP_BROWSER_TOKEN"))
+
+    doctor = commands.add_parser("doctor")
+    doctor.add_argument(
+        "--projects",
+        type=Path,
+        default=Path(os.getenv("AI_WORKSHOP_PROJECTS", "config/projects.local.yaml")),
+    )
+    doctor.add_argument(
+        "--workspace-url",
+        default=os.getenv("AI_WORKSHOP_WORKSPACE_URL", "http://127.0.0.1:8766"),
+    )
+    doctor.add_argument(
+        "--gateway-host",
+        default=os.getenv("AI_WORKSHOP_MCP_HOST", "127.0.0.1"),
+    )
+    doctor.add_argument(
+        "--gateway-port",
+        type=int,
+        default=int(os.getenv("AI_WORKSHOP_MCP_PORT", "8765")),
+    )
+    doctor.add_argument("--browser-url", default=os.getenv("AI_WORKSHOP_BROWSER_URL"))
     return parser
 
 
@@ -82,7 +110,15 @@ def main(argv: list[str] | None = None) -> int:
         if not args.token:
             raise SystemExit("AI_WORKSHOP_WORKSPACE_TOKEN or --token is required")
         config = WorkshopConfig.load(args.projects)
-        uvicorn.run(create_app(config, workspace_token=args.token), host=args.host, port=args.port)
+        uvicorn.run(
+            create_app(
+                config,
+                workspace_token=args.token,
+                state_root=args.state,
+            ),
+            host=args.host,
+            port=args.port,
+        )
         return 0
     if args.command == "gateway":
         from ai_workshop.gateway.server import run_gateway
@@ -108,6 +144,61 @@ def main(argv: list[str] | None = None) -> int:
             service_controller=service_controller,
         )
         return 0
+    if args.command == "doctor":
+        import json
+        from dataclasses import asdict
+        from ai_workshop.doctor import (
+            CheckSpec,
+            Doctor,
+            docker_check,
+            http_health_check,
+            project_paths_check,
+            tcp_check,
+        )
+
+        checks = []
+        try:
+            project_config = WorkshopConfig.load(args.projects)
+            checks.append(project_paths_check(project_config))
+        except Exception:
+            checks.append(CheckSpec(
+                "projects",
+                required=True,
+                probe=lambda: (False, "project configuration is unavailable"),
+                remediation="create or fix the projects configuration",
+            ))
+        checks.append(docker_check())
+        checks.append(http_health_check(
+            "workspace",
+            args.workspace_url,
+            required=True,
+            remediation="start agent-workspace",
+        ))
+        checks.append(tcp_check(
+            "gateway",
+            args.gateway_host,
+            args.gateway_port,
+            required=True,
+            remediation="start ai-workshop gateway",
+        ))
+        if args.browser_url:
+            checks.append(http_health_check(
+                "browser",
+                args.browser_url,
+                required=False,
+                remediation="start browser service",
+            ))
+        report = Doctor(checks).run()
+        print(json.dumps(
+            {
+                "healthy": report.healthy,
+                "exit_code": report.exit_code,
+                "checks": [asdict(item) for item in report.checks],
+            },
+            indent=2,
+            sort_keys=True,
+        ))
+        return report.exit_code
     if args.command == "browser":
         import uvicorn
         from ai_workshop.browser.app import create_browser_app
