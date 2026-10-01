@@ -11,6 +11,7 @@ import time
 from typing import Callable
 
 from ai_workshop.models.recovery import ConfirmationToken, RestorePreview, RestoreResult
+from ai_workshop.recovery.env import safe_subprocess_env
 from ai_workshop.recovery.git_snapshot import (
     ensure_git_repository,
     git_bytes,
@@ -132,6 +133,7 @@ class RestoreService:
             ["git", *args],
             cwd=root,
             capture_output=True,
+            env=safe_subprocess_env(),
             check=False,
         )
         if result.returncode != 0:
