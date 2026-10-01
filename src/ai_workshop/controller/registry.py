@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
+
+import yaml
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,12 +17,13 @@ class RegisteredService:
     allowed_operations: frozenset[str]
 
     def __post_init__(self) -> None:
-        if not self.service_id:
-            raise ValueError("service_id must not be empty")
-        if not self.compose_project:
-            raise ValueError("compose_project must not be empty")
-        if not self.compose_service:
-            raise ValueError("compose_service must not be empty")
+        name_pattern = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+        if not name_pattern.fullmatch(self.service_id):
+            raise ValueError("service_id must be a safe identifier")
+        if not name_pattern.fullmatch(self.compose_project):
+            raise ValueError("compose_project must be a safe identifier")
+        if not name_pattern.fullmatch(self.compose_service):
+            raise ValueError("compose_service must be a safe identifier")
         object.__setattr__(self, "working_dir", self.working_dir.resolve())
         object.__setattr__(
             self,
@@ -36,6 +40,41 @@ class ServiceRegistry:
                 raise ValueError(f"duplicate service: {service.service_id}")
             mapped[service.service_id] = service
         self._services = mapped
+
+    @classmethod
+    def load(cls, path: Path) -> "ServiceRegistry":
+        if not path.exists():
+            raise FileNotFoundError(f"service registry not found: {path}")
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        services_raw = raw.get("services") or {}
+        if not isinstance(services_raw, dict):
+            raise ValueError("registry services must be a mapping")
+        services: list[RegisteredService] = []
+        for service_id, data in services_raw.items():
+            if not isinstance(data, dict):
+                raise ValueError(f"invalid registry entry: {service_id}")
+            working_dir = Path(data["working_dir"]).resolve()
+            compose_files = tuple(Path(value).resolve() for value in data.get("compose_files", []))
+            if not compose_files:
+                raise ValueError(f"service {service_id} has no compose files")
+            for compose_file in compose_files:
+                try:
+                    compose_file.relative_to(working_dir)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"service {service_id} compose file is outside working_dir"
+                    ) from exc
+            services.append(
+                RegisteredService(
+                    service_id=service_id,
+                    compose_project=str(data["compose_project"]),
+                    working_dir=working_dir,
+                    compose_files=compose_files,
+                    compose_service=str(data["compose_service"]),
+                    allowed_operations=frozenset(data.get("allowed_operations", [])),
+                )
+            )
+        return cls(services)
 
     def list_ids(self) -> list[str]:
         return sorted(self._services)
