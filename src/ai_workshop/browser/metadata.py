@@ -31,6 +31,7 @@ def build_metadata(
                 "change_score": candidate.change_score,
                 "changed_boxes": candidate.changed_boxes,
                 "selected": candidate.selected,
+                "pixel_threshold": candidate.pixel_threshold,
             }
             for candidate in selection.candidates
         ],
