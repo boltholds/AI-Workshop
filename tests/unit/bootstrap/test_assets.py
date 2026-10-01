@@ -68,3 +68,12 @@ def test_shell_bootstrap_does_not_execute_env_file():
     text = read("scripts/bootstrap.sh")
     assert "source \"$ROOT/.env.local\"" not in text
     assert "AI_WORKSHOP_*" in text
+
+
+def test_bootstrap_restarts_only_its_tracked_gateway():
+    shell = read("scripts/bootstrap.sh")
+    powershell = read("scripts/bootstrap.ps1")
+    assert 'kill "$old_pid"' in shell
+    assert "Stop-Process -Id" in powershell
+    assert "gateway.pid" in shell
+    assert "gateway.pid" in powershell
