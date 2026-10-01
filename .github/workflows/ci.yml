@@ -29,6 +29,8 @@ jobs:
         run: uv sync
       - name: Configure fixture project
         run: |
+          echo "AI_WORKSHOP_UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "AI_WORKSHOP_GID=$(id -g)" >> "$GITHUB_ENV"
           cat > config/projects.local.yaml <<YAML
           projects:
             fixture:
