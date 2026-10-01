@@ -1,0 +1,9 @@
+projects:
+  app:
+    host: "C:/Users/example/Code/My-App"
+    container: /workspace/app
+    mode: rw
+  worker:
+    host: "C:/Users/example/Code/My-Worker"
+    container: /workspace/worker
+    mode: rw

@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AI Workshop local state
+.workshop/
+config/projects.local.yaml
+config/services.local.yaml

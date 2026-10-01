@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-workshop"
+version = "0.1.0"
+description = "Isolated local development environment for AI agents"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "mcp>=2,<3",
+  "pydantic>=2,<3",
+  "PyYAML>=6,<7",
+  "uvicorn>=0.35,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=9,<10"]
+
+[project.scripts]
+ai-workshop = "ai_workshop.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_workshop"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
