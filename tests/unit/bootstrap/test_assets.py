@@ -54,3 +54,11 @@ def test_chatgpt_setup_docs_keep_workshop_private():
     assert "Edu" in text
     assert "Pro" in text
     assert "public internet" in text.lower()
+
+
+def test_bootstrap_local_secrets_and_configs_are_gitignored():
+    text = read(".gitignore")
+    assert ".env.local" in text
+    assert "config/projects.local.yaml" in text
+    assert "config/services.local.yaml" in text
+    assert "config/recovery.local.yaml" in text
