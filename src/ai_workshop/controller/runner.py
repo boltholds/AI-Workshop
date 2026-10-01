@@ -58,8 +58,8 @@ class ComposeController:
         self.executor = executor or SubprocessExecutor()
         self.timeout_seconds = timeout_seconds
 
-    def list_services(self) -> list[str]:
-        return self.registry.list_ids()
+    def list_services(self, profile_id: str | None = None) -> list[str]:
+        return self.registry.list_ids(profile_id)
 
     def status(self, service_id: str) -> ServiceStatus:
         result = self._execute(service_id, "status", ["ps"])
