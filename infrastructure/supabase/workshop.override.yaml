@@ -1,0 +1,9 @@
+services:
+  api-gw:
+    networks:
+      default: {}
+      ai-workshop: {}
+
+networks:
+  ai-workshop:
+    external: true

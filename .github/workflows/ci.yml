@@ -85,6 +85,8 @@ jobs:
             exit 1
           fi
           uv run python tests/e2e/mcp_smoke.py
+      - name: Generic local infrastructure E2E
+        run: uv run pytest tests/e2e/test_local_infrastructure.py -v
       - name: Stop workspace
         if: always()
         run: docker compose -f compose.yaml -f .workshop/compose.projects.yaml down -v

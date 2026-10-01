@@ -18,6 +18,14 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--projects", type=Path, required=True)
     render.add_argument("--output", type=Path, required=True)
 
+    services = commands.add_parser("services")
+    services_commands = services.add_subparsers(dest="services_command", required=True)
+    services_render = services_commands.add_parser("render")
+    services_render.add_argument("--projects", type=Path, required=True)
+    services_render.add_argument("--services", type=Path, required=True)
+    services_render.add_argument("--compose-output", type=Path, required=True)
+    services_render.add_argument("--registry-output", type=Path, required=True)
+
     workspace = commands.add_parser("workspace")
     workspace.add_argument("--projects", type=Path, required=True)
     workspace.add_argument("--host", default="0.0.0.0")
@@ -31,6 +39,13 @@ def build_parser() -> argparse.ArgumentParser:
     gateway.add_argument("--workspace-token", default=os.getenv("AI_WORKSHOP_WORKSPACE_TOKEN"))
     gateway.add_argument("--browser-url", default=os.getenv("AI_WORKSHOP_BROWSER_URL"))
     gateway.add_argument("--browser-token", default=os.getenv("AI_WORKSHOP_BROWSER_TOKEN"))
+    gateway.add_argument(
+        "--service-registry",
+        type=Path,
+        default=Path(os.environ["AI_WORKSHOP_SERVICE_REGISTRY"])
+        if os.getenv("AI_WORKSHOP_SERVICE_REGISTRY")
+        else None,
+    )
 
     browser = commands.add_parser("browser")
     browser.add_argument("--profile", type=Path, default=Path("/data/browser-profile"))
@@ -46,6 +61,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "compose" and args.compose_command == "render":
         config = WorkshopConfig.load(args.projects)
         render_project_override(config, args.output)
+        return 0
+    if args.command == "services" and args.services_command == "render":
+        from ai_workshop.services.config import ServiceConfig
+        from ai_workshop.services.render import render_service_override
+
+        projects = WorkshopConfig.load(args.projects)
+        services_config = ServiceConfig.load(args.services)
+        render_service_override(
+            services_config,
+            projects,
+            compose_path=args.compose_output,
+            registry_path=args.registry_output,
+        )
         return 0
     if args.command == "workspace":
         import uvicorn
@@ -63,6 +91,13 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("AI_WORKSHOP_WORKSPACE_TOKEN or --workspace-token is required")
         if args.browser_url and not args.browser_token:
             raise SystemExit("AI_WORKSHOP_BROWSER_TOKEN or --browser-token is required when browser is configured")
+        service_controller = None
+        if args.service_registry is not None:
+            from ai_workshop.controller.registry import ServiceRegistry
+            from ai_workshop.controller.runner import ComposeController
+
+            service_controller = ComposeController(ServiceRegistry.load(args.service_registry))
+
         run_gateway(
             args.workspace_url,
             token=args.workspace_token,
@@ -70,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             browser_url=args.browser_url,
             browser_token=args.browser_token,
+            service_controller=service_controller,
         )
         return 0
     if args.command == "browser":
