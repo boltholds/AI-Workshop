@@ -53,6 +53,23 @@ def build_parser() -> argparse.ArgumentParser:
         if os.getenv("AI_WORKSHOP_SERVICE_REGISTRY")
         else None,
     )
+    gateway.add_argument(
+        "--recovery-config",
+        type=Path,
+        default=Path(os.environ["AI_WORKSHOP_RECOVERY_CONFIG"])
+        if os.getenv("AI_WORKSHOP_RECOVERY_CONFIG")
+        else None,
+    )
+    gateway.add_argument(
+        "--gateway-state",
+        type=Path,
+        default=Path(os.getenv("AI_WORKSHOP_GATEWAY_STATE_ROOT", ".workshop/state")),
+    )
+    gateway.add_argument(
+        "--projects",
+        type=Path,
+        default=Path(os.getenv("AI_WORKSHOP_PROJECTS", "config/projects.local.yaml")),
+    )
 
     browser = commands.add_parser("browser")
     browser.add_argument("--profile", type=Path, default=Path("/data/browser-profile"))
@@ -134,6 +151,22 @@ def main(argv: list[str] | None = None) -> int:
 
             service_controller = ComposeController(ServiceRegistry.load(args.service_registry))
 
+        state_snapshot_service = None
+        reset_service = None
+        if args.recovery_config is not None:
+            from ai_workshop.recovery.config import (
+                RecoveryConfig,
+                build_recovery_runtime,
+            )
+
+            recovery_runtime = build_recovery_runtime(
+                RecoveryConfig.load(args.recovery_config),
+                state_root=args.gateway_state,
+                projects=WorkshopConfig.load(args.projects),
+            )
+            state_snapshot_service = recovery_runtime.state_service
+            reset_service = recovery_runtime.reset_service
+
         run_gateway(
             args.workspace_url,
             token=args.workspace_token,
@@ -142,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
             browser_url=args.browser_url,
             browser_token=args.browser_token,
             service_controller=service_controller,
+            state_snapshot_service=state_snapshot_service,
+            reset_service=reset_service,
         )
         return 0
     if args.command == "doctor":
