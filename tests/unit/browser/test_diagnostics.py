@@ -28,12 +28,21 @@ def test_dual_diagnostics_writes_png_json_and_removes_frames(tmp_path: Path):
     assert not (tmp_path/"s1"/"frames").exists()
 
 
-def test_keep_frames_passes_frames_dir_to_decoder(tmp_path: Path):
+def test_keep_frames_writes_only_adaptively_selected_frames(tmp_path: Path):
     seen={}
-    def decoder(path,frames_dir=None):
-        seen["frames_dir"]=frames_dir; frames_dir.mkdir(parents=True); (frames_dir/"000.png").write_bytes(b"x"); return frames()
-    DiagnosticService(tmp_path,decoder=decoder).build(recording(tmp_path),DiagnosticOptions(keep_frames=True))
-    assert seen["frames_dir"] == tmp_path/"s1"/"frames"
+    def decoder(path, frames_dir=None):
+        seen["frames_dir"]=frames_dir
+        values=decoded_frames()
+        values.insert(1, FrameSample(50, values[0].image.copy()))
+        return values
+    artifact=recording(tmp_path)
+    DiagnosticService(tmp_path, decoder=decoder).build(
+        artifact,
+        DiagnosticOptions(variants="neutral", keep_frames=True, max_fps=10),
+    )
+    assert seen["frames_dir"] is None
+    saved=sorted((tmp_path/"s1"/"frames").glob("*.png"))
+    assert len(saved) == 3
 
 
 def test_recording_survives_composite_failure(tmp_path: Path):
