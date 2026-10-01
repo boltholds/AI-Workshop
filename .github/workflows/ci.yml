@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install
+        run: uv sync
+      - name: Test
+        run: uv run pytest tests/unit tests/integration -v
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install host CLI
+        run: uv sync
+      - name: Configure fixture project
+        run: |
+          cat > config/projects.local.yaml <<YAML
+          projects:
+            fixture:
+              host: "$GITHUB_WORKSPACE/tests/fixtures/host-project"
+              container: /workspace/fixture
+              mode: rw
+          YAML
+          uv run ai-workshop compose render \
+            --projects config/projects.local.yaml \
+            --output .workshop/compose.projects.yaml
+      - name: Build and start workspace
+        run: |
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d --build agent-workspace
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8766/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml logs agent-workspace
+          exit 1
+      - name: Stop workspace
+        if: always()
+        run: docker compose -f compose.yaml -f .workshop/compose.projects.yaml down -v
