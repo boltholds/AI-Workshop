@@ -104,10 +104,9 @@ jobs:
           docker compose run --rm --no-deps \
             -v "$GITHUB_WORKSPACE:/work" \
             --entrypoint bash browser -lc '
-              python -m venv /tmp/browser-test &&
-              /tmp/browser-test/bin/pip install -q -e /work pytest &&
+              python -m pip install --user -q pytest &&
               cd /work &&
-              /tmp/browser-test/bin/pytest tests/integration/browser tests/e2e/test_browser_diagnostics.py -v
+              python -m pytest tests/integration/browser tests/e2e/test_browser_diagnostics.py -v
             '
       - name: Browser service auth smoke
         run: |
