@@ -4,7 +4,7 @@
 
 **Goal:** Build the minimal AI Workshop runtime that mounts real host projects, exposes safe filesystem/shell/Git operations, and publishes them through an MCP v2 Streamable HTTP gateway.
 
-**Architecture:** A private `agent-workspace` FastAPI service owns direct access to mounted repositories. A separate `mcp-gateway` uses the official MCP Python SDK v2 and forwards typed tool calls to that private service over the Workshop Docker network. Host project mounts are generated from a local YAML file into a Compose override so the base repository stays project-agnostic.
+**Architecture:** A containerized `agent-workspace` FastAPI service owns direct access to mounted repositories. A narrow host-side `mcp-gateway` uses the official MCP Python SDK v2 and forwards typed tool calls to the workspace API through a loopback-only published port; the gateway itself never receives direct project filesystem access. Host project mounts are generated from a local YAML file into a Compose override so the base repository stays project-agnostic.
 
 **Tech Stack:** Python 3.12, uv, FastAPI, Pydantic v2, httpx, official `mcp>=2,<3` Python SDK, pytest, Docker Compose.
 
@@ -67,7 +67,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Write failing Compose-render tests**
 
-Assert that two configured projects produce a deterministic override containing matching bind mounts for both `agent-workspace` and no unrelated host paths.
+Assert that two configured projects produce a deterministic override containing both bind mounts on `agent-workspace` and no unrelated host paths.
 
 - [ ] **Step 6: Run the Compose-render tests**
 
@@ -212,7 +212,7 @@ Assert `/health`, project listing, filesystem read/write, shell execution, and G
 
 - [ ] **Step 2: Implement the private workspace API**
 
-Expose only the typed service methods required by the MCP layer. Bind to the private container interface; do not publish the workspace API to the host.
+Expose only the typed service methods required by the MCP layer. In Compose, publish the workspace API only to `127.0.0.1:8766`; never bind it to the host LAN.
 
 - [ ] **Step 3: Run workspace API tests**
 
@@ -245,22 +245,20 @@ git commit -m "feat: expose workspace through mcp gateway"
 - Create: `compose.yaml`
 - Create: `agent/Dockerfile`
 - Create: `agent/entrypoint.sh`
-- Create: `gateway/Dockerfile`
-- Create: `gateway/entrypoint.sh`
 - Create: `tests/e2e/test_core_compose.py`
 - Modify: `README.md`
 
 **Interfaces:**
 - Consumes: Task 1 mount override and Task 4 HTTP services.
-- Produces: runnable `agent-workspace` and `mcp-gateway` services on the `ai-workshop` private network.
+- Produces: runnable `agent-workspace` container plus host-side `ai-workshop gateway` on `127.0.0.1:8765`.
 
 - [ ] **Step 1: Write the failing Compose smoke test**
 
-The test must create a temporary host Git repository, render a project override, start only `agent-workspace` and `mcp-gateway`, write a file through MCP, run a command through MCP, and verify the file changed on the host.
+The test must create a temporary host Git repository, render a project override, start `agent-workspace`, launch the host-side MCP gateway, write a file through MCP, run a command through MCP, and verify the file changed on the host.
 
-- [ ] **Step 2: Implement the two container images and base Compose file**
+- [ ] **Step 2: Implement the agent container and base Compose file**
 
-Run containers as a non-root user, mount only generated project binds, expose only the MCP gateway port to the host, add healthchecks, and add named caches without mounting the host Docker socket.
+Run `agent-workspace` as a non-root user, mount only generated project binds, publish its control API only as `127.0.0.1:8766`, add a healthcheck and named caches, and do not mount the host Docker socket. Add CLI command `ai-workshop gateway` to run Streamable HTTP MCP on `127.0.0.1:8765` and connect only to the configured loopback workspace URL.
 
 - [ ] **Step 3: Run the E2E core test**
 
@@ -279,6 +277,6 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add compose.yaml agent gateway README.md tests/e2e
+git add compose.yaml agent src/ai_workshop/gateway README.md tests/e2e
 git commit -m "feat: ship core ai workshop runtime"
 ```
