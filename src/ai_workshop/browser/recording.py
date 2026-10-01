@@ -9,7 +9,7 @@ import cv2
 
 from ai_workshop.browser.artifacts import ArtifactStore
 from ai_workshop.browser.frames import FrameSample
-from ai_workshop.browser.models import ArtifactRef, CaptureRegion, PageRegion
+from ai_workshop.browser.models import ArtifactRef, CaptureRegion, PageRegion, SelectorRegion
 from ai_workshop.browser.regions import resolve_region
 
 
@@ -60,6 +60,8 @@ class RecordingService:
         if source_url and source_url != "about:blank":
             page.goto(source_url, wait_until="domcontentloaded")
         resolved = resolve_region(page, request.region)
+        if isinstance(request.region, SelectorRegion):
+            self._start_selector_tracking(page, request.region.selector)
         if page.video is None:
             context.close(); browser.close()
             raise RuntimeError("Playwright did not create a video recorder")
@@ -85,6 +87,10 @@ class RecordingService:
         except KeyError as exc:
             raise KeyError(f"unknown recording session: {session_id}") from exc
         try:
+            if isinstance(session.region, SelectorRegion):
+                tracked_clip = self._stop_selector_tracking(session.page, session.viewport)
+                if tracked_clip is not None:
+                    session.resolved_clip = tracked_clip
             session.context.close()
             source = Path(session.video.path())
             destination = self.store.path(session_id, "recording.webm")
@@ -99,6 +105,68 @@ class RecordingService:
         )
         self._completed[session_id] = artifact
         return artifact
+
+
+    @staticmethod
+    def _start_selector_tracking(page, selector: str) -> None:
+        page.evaluate(
+            """selector => {
+                window.__aiWorkshopSelectorRects = [];
+                const sample = () => {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length === 1) {
+                        const r = elements[0].getBoundingClientRect();
+                        window.__aiWorkshopSelectorRects.push({
+                            x: r.x,
+                            y: r.y,
+                            width: r.width,
+                            height: r.height,
+                        });
+                    }
+                    window.__aiWorkshopSelectorTracker = requestAnimationFrame(sample);
+                };
+                sample();
+            }""",
+            selector,
+        )
+
+    @staticmethod
+    def _stop_selector_tracking(page, viewport: dict[str, int] | None) -> dict[str, float] | None:
+        try:
+            rects = page.evaluate(
+                """() => {
+                    if (window.__aiWorkshopSelectorTracker !== undefined) {
+                        cancelAnimationFrame(window.__aiWorkshopSelectorTracker);
+                    }
+                    return window.__aiWorkshopSelectorRects || [];
+                }"""
+            )
+        except Exception:
+            return None
+        if not rects:
+            return None
+
+        valid = [
+            rect for rect in rects
+            if float(rect.get("width", 0)) > 0 and float(rect.get("height", 0)) > 0
+        ]
+        if not valid:
+            return None
+
+        x0 = min(float(rect["x"]) for rect in valid)
+        y0 = min(float(rect["y"]) for rect in valid)
+        x1 = max(float(rect["x"]) + float(rect["width"]) for rect in valid)
+        y1 = max(float(rect["y"]) + float(rect["height"]) for rect in valid)
+
+        if viewport is not None:
+            x0 = max(0.0, min(x0, float(viewport["width"])))
+            y0 = max(0.0, min(y0, float(viewport["height"])))
+            x1 = max(x0, min(x1, float(viewport["width"])))
+            y1 = max(y0, min(y1, float(viewport["height"])))
+
+        if x1 <= x0 or y1 <= y0:
+            return None
+        return {"x": x0, "y": y0, "width": x1 - x0, "height": y1 - y0}
 
 
 def decode_video(path: Path, *, frames_dir: Path | None = None) -> list[FrameSample]:
