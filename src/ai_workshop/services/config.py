@@ -4,13 +4,17 @@ from pathlib import Path, PurePosixPath
 from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ai_workshop.config import WorkshopConfig
 from ai_workshop.workspace.paths import PathPolicy
 
 
-class BuildSource(BaseModel):
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class BuildSource(StrictModel):
     kind: Literal["build"] = "build"
     project_id: str = Field(min_length=1)
     context: str = "."
@@ -27,7 +31,7 @@ class BuildSource(BaseModel):
         return value
 
 
-class ImageSource(BaseModel):
+class ImageSource(StrictModel):
     kind: Literal["image"] = "image"
     image: str = Field(min_length=1)
 
@@ -35,13 +39,13 @@ class ImageSource(BaseModel):
 ServiceSource = Annotated[BuildSource | ImageSource, Field(discriminator="kind")]
 
 
-class PortBinding(BaseModel):
+class PortBinding(StrictModel):
     container: int = Field(ge=1, le=65535)
     host: int | None = Field(default=None, ge=1, le=65535)
     host_ip: Literal["127.0.0.1"] = "127.0.0.1"
 
 
-class PersistentVolume(BaseModel):
+class PersistentVolume(StrictModel):
     name: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9_.-]+$")
     target: str = Field(min_length=1)
 
@@ -53,27 +57,43 @@ class PersistentVolume(BaseModel):
         return value
 
 
-class Healthcheck(BaseModel):
+class Healthcheck(StrictModel):
     command: list[str] = Field(min_length=1)
     interval: str = "10s"
     timeout: str = "3s"
     retries: int = Field(default=5, ge=1)
 
 
-class ServiceDefinition(BaseModel):
+class ServiceDefinition(StrictModel):
     source: ServiceSource
     command: list[str] | None = None
+    environment: dict[str, str] = Field(default_factory=dict)
+    env_files: list[str] = Field(default_factory=list)
     ports: list[PortBinding] = Field(default_factory=list)
     volumes: list[PersistentVolume] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
     healthcheck: Healthcheck | None = None
 
+    @field_validator("env_files")
+    @classmethod
+    def env_files_must_be_private_workshop_paths(cls, values: list[str]) -> list[str]:
+        for value in values:
+            path = PurePosixPath(value)
+            if (
+                path.is_absolute()
+                or ".." in path.parts
+                or len(path.parts) < 3
+                or path.parts[:2] != (".workshop", "secrets")
+            ):
+                raise ValueError("env files must live under .workshop/secrets/")
+        return values
 
-class ServiceProfile(BaseModel):
+
+class ServiceProfile(StrictModel):
     services: list[str] = Field(default_factory=list)
 
 
-class ServiceConfig(BaseModel):
+class ServiceConfig(StrictModel):
     services: dict[str, ServiceDefinition] = Field(default_factory=dict)
     profiles: dict[str, ServiceProfile] = Field(default_factory=dict)
 
