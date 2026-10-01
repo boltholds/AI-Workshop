@@ -4,9 +4,9 @@
 
 **Goal:** Add explicit snapshot/restore/reset operations, environment diagnostics, and a full end-to-end test proving the agent can edit a real mounted project, run it, inspect it in Chromium, capture diagnostics, and leave unrelated host state untouched.
 
-**Architecture:** Git-aware project snapshots capture the exact pre-agent worktree state without requiring a clean repository, while database snapshots use normal PostgreSQL dump/restore against the isolated Workshop database. Restore is an explicit operation with a preview and confirmation token. A `doctor` command checks the host/container control plane and produces actionable diagnostics before work begins.
+**Architecture:** Git-aware project snapshots capture the exact pre-agent worktree state without requiring a clean repository. Persistent service state uses a generic snapshot-adapter contract; PostgreSQL dump/restore is the first reference adapter, not a core dependency. Restore is an explicit operation with a preview and confirmation token. A `doctor` command checks the host/container control plane and produces actionable diagnostics before work begins.
 
-**Tech Stack:** Python 3.12, Git CLI, PostgreSQL client tools, tarfile, FastAPI/MCP layers from earlier plans, pytest.
+**Tech Stack:** Python 3.12, Git CLI, adapter-driven persistence tooling, tarfile, FastAPI/MCP layers from earlier plans, pytest; PostgreSQL client tools are optional for the PostgreSQL reference adapter.
 
 **Spec:** `docs/superpowers/specs/2026-10-01-ai-workshop-design.md`
 
@@ -24,7 +24,7 @@
 - A snapshot must preserve a repository that was already dirty before the agent started; Task 1 adds `test_snapshot_round_trip_preserves_preexisting_dirty_state`.
 - Restore must refuse when the current repository identity differs from the snapshot; Task 2 adds `test_restore_rejects_different_repository`.
 - New untracked files created after a snapshot must be removed only inside the restored project, never outside it; Task 2 adds `test_restore_cleans_only_project_root`.
-- Database restore failure must leave the dump artifact available for manual recovery; Task 3 adds `test_failed_db_restore_keeps_dump`.
+- Persistent-state restore failure must leave the snapshot artifact available for manual recovery; Task 3 adds `test_failed_state_restore_keeps_artifact`. The PostgreSQL reference adapter also tests this behavior with a database dump.
 - Doctor must distinguish an unreachable MCP gateway from an unhealthy browser or controller; Task 4 adds `test_doctor_reports_component_specific_failure`.
 
 ---
@@ -96,44 +96,46 @@ git add src/ai_workshop/recovery/restore.py src/ai_workshop/models/recovery.py t
 git commit -m "feat: add explicit workspace restore"
 ```
 
-### Task 3: PostgreSQL snapshot/restore and scoped Workshop reset
+### Task 3: Generic persistent-state snapshot adapters and scoped Workshop reset
 
 **Files:**
-- Create: `src/ai_workshop/recovery/database.py`
+- Create: `src/ai_workshop/recovery/state.py`
+- Create: `src/ai_workshop/recovery/adapters/postgres.py`
 - Create: `src/ai_workshop/recovery/reset.py`
-- Test: `tests/integration/recovery/test_database.py`
+- Test: `tests/unit/recovery/test_state.py`
+- Test: `tests/integration/recovery/test_postgres_adapter.py`
 - Test: `tests/unit/recovery/test_reset.py`
 
 **Interfaces:**
-- Consumes: local database connection config.
-- Produces: `DatabaseSnapshotService.dump(name) -> ArtifactRef`, `DatabaseSnapshotService.restore(artifact, token) -> RestoreResult`, `ResetService.plan(scope) -> ResetPlan`, `ResetService.execute(plan, token) -> ResetResult`.
+- Consumes: registered persistence adapters and their local service/profile configuration.
+- Produces: `StateSnapshotService.create(adapter_id, target_id) -> ArtifactRef`, `StateSnapshotService.restore(artifact, token) -> RestoreResult`, adapter protocol `snapshot(target, destination) -> AdapterSnapshot` / `restore(target, artifact) -> None`, plus `ResetService.plan(scope) -> ResetPlan` and `ResetService.execute(plan, token) -> ResetResult`.
 
-- [ ] **Step 1: Write failing database tests**
+- [ ] **Step 1: Write failing generic state-adapter tests**
 
-Use a disposable Postgres fixture. Assert dump/restore round trip, invalid dump failure, explicit confirmation, and `test_failed_db_restore_keeps_dump`.
+Use an in-memory/fake adapter to assert adapter registration, artifact creation, explicit confirmation, target binding, unknown adapter rejection, and `test_failed_state_restore_keeps_artifact`.
 
-- [ ] **Step 2: Implement PostgreSQL dump/restore**
+- [ ] **Step 2: Implement generic state snapshot service and PostgreSQL reference adapter**
 
-Use `pg_dump` and `pg_restore`/psql through fixed argv and Workshop-local connection settings. Preserve dump files regardless of restore result.
+The core service knows only the adapter protocol and artifact/confirmation lifecycle. The optional PostgreSQL adapter uses `pg_dump` and `pg_restore`/psql through fixed argv and Workshop-local connection settings. Preserve snapshot artifacts regardless of restore result.
 
 - [ ] **Step 3: Write failing reset tests**
 
-Assert scopes `cache`, `browser-artifacts`, `database`, and `infrastructure` never include host project directories. There is no implicit `projects` reset scope.
+Assert scopes `cache`, `browser-artifacts`, `state:<adapter-or-target>`, and `infrastructure` never include host project directories. There is no implicit `projects` reset scope and no mandatory database vendor.
 
 - [ ] **Step 4: Implement scoped reset**
 
-Require the same preview/confirmation pattern as project restore for destructive database/infrastructure reset operations.
+Require the same preview/confirmation pattern as project restore for destructive persistent-state/infrastructure reset operations.
 
 - [ ] **Step 5: Run Task 3 tests**
 
-Run: `uv run pytest tests/integration/recovery/test_database.py tests/unit/recovery/test_reset.py -v`  
+Run: `uv run pytest tests/unit/recovery/test_state.py tests/integration/recovery/test_postgres_adapter.py tests/unit/recovery/test_reset.py -v`  
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add src/ai_workshop/recovery tests
-git commit -m "feat: add database recovery and scoped reset"
+git commit -m "feat: add state recovery adapters and scoped reset"
 ```
 
 ### Task 4: Doctor diagnostics and recovery MCP tools
@@ -147,12 +149,12 @@ git commit -m "feat: add database recovery and scoped reset"
 - Test: `tests/integration/test_recovery_mcp.py`
 
 **Interfaces:**
-- Consumes: gateway, browser, controller, database, and configured project state.
-- Produces: CLI `ai-workshop doctor`; MCP tools `workspace_snapshot_create`, `workspace_snapshot_preview_restore`, `workspace_snapshot_prepare_restore`, `workspace_snapshot_restore`, `database_snapshot_create`, and scoped reset tools.
+- Consumes: gateway, browser, controller, registered persistence adapters, and configured project state.
+- Produces: CLI `ai-workshop doctor`; MCP tools `workspace_snapshot_create`, `workspace_snapshot_preview_restore`, `workspace_snapshot_prepare_restore`, `workspace_snapshot_restore`, generic `state_snapshot_create` / state restore tools, and scoped reset tools.
 
 - [ ] **Step 1: Write failing doctor tests**
 
-Cover all healthy, missing project path, Docker unavailable, controller unavailable, gateway unavailable, browser unhealthy, database unhealthy, and `test_doctor_reports_component_specific_failure`.
+Cover all healthy, missing project path, Docker unavailable, controller unavailable, gateway unavailable, browser unhealthy, an unhealthy optional persistence adapter/service, and `test_doctor_reports_component_specific_failure`.
 
 - [ ] **Step 2: Implement doctor**
 
