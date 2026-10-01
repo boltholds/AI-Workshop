@@ -32,3 +32,16 @@ def test_legend_is_optional_and_does_not_change_dimensions():
     a=renderer.render(result,variant="time-gradient",legend=False); b=renderer.render(result,variant="time-gradient",legend=True)
     assert a.size == b.size == (80,60)
     assert np.any(np.array(a) != np.array(b))
+
+
+def test_neutral_composite_preserves_latest_static_background():
+    frames = []
+    backgrounds = [(10, 20, 30), (20, 40, 60), (30, 60, 90)]
+    for i, color in enumerate(backgrounds):
+        img = np.zeros((40, 60, 3), dtype=np.uint8)
+        img[:] = color
+        img[10:20, 5 + i * 15:15 + i * 15] = (200, 100, 50)
+        frames.append(FrameSample(i * 200, img))
+    selection = AdaptiveFrameSelector().select(frames, SelectionConfig(sensitivity="high"))
+    image = np.array(CompositeRenderer().render(selection, variant="neutral"))
+    assert tuple(image[35, 55]) == backgrounds[-1]
