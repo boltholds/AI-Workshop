@@ -13,8 +13,8 @@ def register_service_tools(server, controller: ComposeController) -> None:
             raise RuntimeError(str(exc).strip("'")) from None
 
     @server.tool()
-    def services_list() -> list[str]:
-        return controller.list_services()
+    def services_list(profile_id: str | None = None) -> list[str]:
+        return safe(controller.list_services, profile_id)
 
     @server.tool()
     def services_status(service_id: str) -> dict[str, str]:
