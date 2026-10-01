@@ -11,3 +11,9 @@ def test_compose_only_publishes_workspace_to_loopback_and_has_no_docker_socket()
     assert "/var/run/docker.sock" not in text
     assert "0.0.0.0:8766" not in text
     assert service["user"] != "root"
+
+
+def test_compose_command_does_not_repeat_image_entrypoint():
+    doc = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
+    command = doc["services"]["agent-workspace"]["command"]
+    assert command[0] == "workspace"
