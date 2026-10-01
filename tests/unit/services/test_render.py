@@ -24,6 +24,10 @@ services:
       kind: build
       project_id: app
       context: .
+    environment:
+      APP_MODE: test
+    env_files:
+      - .workshop/secrets/web.env
     ports:
       - container: 8000
         host: 18000
@@ -39,6 +43,9 @@ services:
     services = ServiceConfig.load(services_path)
     services.validate(cfg)
 
+    secrets = tmp_path / ".workshop" / "secrets"
+    secrets.mkdir(parents=True)
+    (secrets / "web.env").write_text("TOKEN=test-only\n", encoding="utf-8")
     compose_path = tmp_path / ".workshop" / "compose.services.yaml"
     registry_path = tmp_path / ".workshop" / "service-registry.yaml"
     render_service_override(services, cfg, compose_path=compose_path, registry_path=registry_path)
@@ -47,6 +54,8 @@ services:
     assert doc["services"]["web"]["build"]["context"] == str(app.resolve())
     assert doc["services"]["web"]["ports"] == ["127.0.0.1:18000:8000"]
     assert doc["services"]["web"]["depends_on"] == ["state"]
+    assert doc["services"]["web"]["environment"] == {"APP_MODE": "test"}
+    assert doc["services"]["web"]["env_file"] == [str((tmp_path / ".workshop" / "secrets" / "web.env").resolve())]
     assert doc["services"]["state"]["image"] == "example/state:1"
     assert doc["services"]["state"]["volumes"] == ["state-data:/var/lib/state"]
     assert doc["volumes"]["state-data"]["name"] == "ai-workshop-state-data"
