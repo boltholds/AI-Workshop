@@ -39,6 +39,8 @@ def test_registry_loads_generated_yaml(tmp_path: Path):
     compose = tmp_path / "compose.services.yaml"
     compose.write_text("services: {}\n", encoding="utf-8")
     registry_path.write_text(f"""
+profiles:
+  dev: [web]
 services:
   web:
     compose_project: workshop-dev
@@ -51,6 +53,9 @@ services:
     registry = ServiceRegistry.load(registry_path)
     assert registry.list_ids() == ["web"]
     assert registry.require("web").compose_files == (compose.resolve(),)
+    assert registry.list_ids("dev") == ["web"]
+    with pytest.raises(KeyError, match="unknown service profile"):
+        registry.list_ids("missing")
 
 
 def test_registry_rejects_option_like_compose_service(tmp_path: Path):
