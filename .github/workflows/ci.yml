@@ -49,6 +49,20 @@ jobs:
             sleep 2
           done
           test "$(curl --silent --output /tmp/unauth.json --write-out '%{http_code}' http://127.0.0.1:8766/v1/projects)" = "401"
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml exec -T agent-workspace bash -lc '
+            python --version &&
+            node --version &&
+            npm --version &&
+            pnpm --version &&
+            uv --version &&
+            poetry --version &&
+            pytest --version &&
+            rg --version &&
+            fd --version &&
+            jq --version &&
+            curl --version &&
+            wget --version
+          '
       - name: MCP end-to-end smoke
         run: |
           uv run ai-workshop gateway --workspace-url http://127.0.0.1:8766 > /tmp/ai-workshop-gateway.log 2>&1 &
