@@ -17,3 +17,10 @@ def test_compose_command_does_not_repeat_image_entrypoint():
     doc = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
     command = doc["services"]["agent-workspace"]["command"]
     assert command[0] == "workspace"
+
+
+def test_compose_requires_workspace_token():
+    doc = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
+    value = doc["services"]["agent-workspace"]["environment"]["AI_WORKSHOP_WORKSPACE_TOKEN"]
+    assert "AI_WORKSHOP_WORKSPACE_TOKEN" in value
+    assert ":?" in value
