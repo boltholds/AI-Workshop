@@ -24,6 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8766)
 
+    browser = sub.add_parser("browser")
+    browser_sub = browser.add_subparsers(dest="browser_command", required=True)
+    browser_serve = browser_sub.add_parser("serve")
+    browser_serve.add_argument("--profile", type=Path, required=True)
+    browser_serve.add_argument("--host", default="0.0.0.0")
+    browser_serve.add_argument("--port", type=int, default=8767)
+
     gateway = sub.add_parser("gateway")
     gateway.add_argument("--workspace-url", default="http://127.0.0.1:8766")
     gateway.add_argument("--host", default="127.0.0.1")
@@ -39,22 +46,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "workspace" and args.workspace_command == "serve":
         import uvicorn
         from ai_workshop.workspace.app import create_workspace_app
-
         app = create_workspace_app(WorkshopConfig.load(args.config))
         uvicorn.run(app, host=args.host, port=args.port)
+        return 0
+    if args.command == "browser" and args.browser_command == "serve":
+        import uvicorn
+        from ai_workshop.browser.app import create_browser_app
+        from ai_workshop.browser.runtime import BrowserRuntime
+        runtime = BrowserRuntime(args.profile, headless=True)
+        uvicorn.run(create_browser_app(runtime, manage_lifecycle=True), host=args.host, port=args.port)
         return 0
     if args.command == "gateway":
         from ai_workshop.gateway.client import WorkspaceClient
         from ai_workshop.gateway.server import build_mcp_server
-
         mcp = build_mcp_server(WorkspaceClient(args.workspace_url))
-        mcp.run(
-            transport="streamable-http",
-            host=args.host,
-            port=args.port,
-            stateless_http=True,
-            json_response=True,
-        )
+        mcp.run(transport="streamable-http", host=args.host, port=args.port, stateless_http=True, json_response=True)
         return 0
     return 2
 
