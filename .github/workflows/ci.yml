@@ -16,6 +16,11 @@ jobs:
         run: uv sync
       - name: Test
         run: uv run pytest tests/unit tests/integration --ignore=tests/integration/browser -v
+      - name: Validate bootstrap script syntax
+        shell: bash
+        run: |
+          bash -n scripts/bootstrap.sh scripts/tunnel.sh
+          pwsh -NoProfile -Command '$files=@("scripts/bootstrap.ps1","scripts/tunnel.ps1"); foreach($file in $files){$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors) | Out-Null; if($errors.Count -gt 0){$errors | Format-List | Out-String | Write-Error; exit 1}}'
 
   docker-smoke:
     runs-on: ubuntu-latest
