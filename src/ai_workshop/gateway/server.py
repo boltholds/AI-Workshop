@@ -4,10 +4,10 @@ from ai_workshop.gateway.client import WorkspaceClient
 from ai_workshop.gateway.errors import GatewayError
 
 
-def build_server(workspace_url: str, browser_url: str | None = None):
+def build_server(workspace_url: str, *, token: str):
     from mcp.server.mcpserver import MCPServer
 
-    client = WorkspaceClient(workspace_url)
+    client = WorkspaceClient(workspace_url, token=token)
     server = MCPServer("AI Workshop")
 
     def safe(callable_, *args, **kwargs):
@@ -43,8 +43,8 @@ def build_server(workspace_url: str, browser_url: str | None = None):
         return safe(client.file_search, project_id, needle, path)
 
     @server.tool()
-    def shell_exec(project_id: str, argv: list[str], env: dict[str, str] | None = None, timeout_seconds: float = 60.0) -> dict[str, object]:
-        return safe(client.shell_exec, project_id, argv, env=env, timeout_seconds=timeout_seconds)
+    def shell_exec(project_id: str, argv: list[str], cwd: str = ".", env: dict[str, str] | None = None, timeout_seconds: float = 60.0) -> dict[str, object]:
+        return safe(client.shell_exec, project_id, argv, cwd=cwd, env=env, timeout_seconds=timeout_seconds)
 
     @server.tool()
     def shell_cancel(run_id: str) -> bool:
@@ -58,15 +58,11 @@ def build_server(workspace_url: str, browser_url: str | None = None):
     def git_diff(project_id: str, staged: bool = False) -> str:
         return safe(client.git_diff, project_id, staged=staged)
 
-    if browser_url:
-        from ai_workshop.gateway.browser_client import BrowserClient
-        from ai_workshop.gateway.browser_tools import register_browser_tools
-        register_browser_tools(server, BrowserClient(browser_url))
     return server
 
 
-def run_gateway(workspace_url: str, host: str = "127.0.0.1", port: int = 8765, browser_url: str | None = None) -> None:
-    server = build_server(workspace_url, browser_url=browser_url)
+def run_gateway(workspace_url: str, *, token: str, host: str = "127.0.0.1", port: int = 8765) -> None:
+    server = build_server(workspace_url, token=token)
     server.run(
         transport="streamable-http",
         host=host,

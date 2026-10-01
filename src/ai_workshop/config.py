@@ -4,7 +4,25 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 
 import yaml
+from yaml.resolver import BaseResolver
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    pass
+
+
+def _construct_unique_mapping(loader: yaml.SafeLoader, node: yaml.MappingNode, deep: bool = False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise ValueError(f"duplicate key: {key}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
 
 
 class ProjectMount(BaseModel):
@@ -30,7 +48,7 @@ class WorkshopConfig(BaseModel):
     def load(cls, path: Path) -> "WorkshopConfig":
         if not path.exists():
             raise FileNotFoundError(f"Workshop project config not found: {path}")
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw = yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader) or {}
         projects_raw = raw.get("projects") or {}
         if not isinstance(projects_raw, dict):
             raise ValueError("projects must be a mapping")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from uuid import UUID
+import hmac
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -39,17 +40,39 @@ class CancelRequest(BaseModel):
     run_id: UUID
 
 
-def create_app(config: WorkshopConfig, *, host_paths: bool = False) -> FastAPI:
+def create_app(config: WorkshopConfig, *, host_paths: bool = False, workspace_token: str) -> FastAPI:
     policy = PathPolicy(config, host_paths=host_paths)
     files = FilesystemService(policy)
     processes = ProcessService(policy)
     git = GitService(processes)
+    if not workspace_token:
+        raise ValueError("workspace token must not be empty")
     app = FastAPI(title="AI Workshop Workspace", docs_url=None, redoc_url=None)
+
+    @app.middleware("http")
+    async def workspace_auth(request: Request, call_next):
+        if request.url.path.startswith("/v1/"):
+            auth = request.headers.get("authorization", "")
+            expected = f"Bearer {workspace_token}"
+            if not hmac.compare_digest(auth, expected):
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": {"code": "UNAUTHORIZED", "message": "Valid workspace token required"}},
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        return await call_next(request)
 
     @app.exception_handler(KeyError)
     @app.exception_handler(ValueError)
     def expected_error(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse(status_code=400, content={"error": {"code": "WORKSPACE_ERROR", "message": str(exc)}})
+
+    @app.exception_handler(PermissionError)
+    def permission_error(_request: Request, exc: PermissionError) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"error": {"code": "WORKSPACE_READ_ONLY", "message": str(exc)}},
+        )
 
     @app.exception_handler(Exception)
     def unexpected_error(_request: Request, _exc: Exception) -> JSONResponse:

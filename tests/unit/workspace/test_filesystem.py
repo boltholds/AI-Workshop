@@ -47,3 +47,14 @@ def test_patch_requires_old_text(tmp_path: Path):
     fs.write("p", "a.txt", "one")
     with pytest.raises(ValueError, match="not found"):
         fs.patch("p", "a.txt", "missing", "two")
+
+
+def test_read_only_project_rejects_write_and_patch(tmp_path: Path):
+    cfg = WorkshopConfig(projects=[ProjectMount(project_id="p", host=tmp_path, container="/workspace/p", mode="ro")])
+    fs = FilesystemService(PathPolicy(cfg, host_paths=True))
+    (tmp_path / "a.txt").write_text("one", encoding="utf-8")
+    with pytest.raises(PermissionError, match="read-only"):
+        fs.write("p", "b.txt", "two")
+    with pytest.raises(PermissionError, match="read-only"):
+        fs.patch("p", "a.txt", "one", "two")
+    assert (tmp_path / "a.txt").read_text(encoding="utf-8") == "one"

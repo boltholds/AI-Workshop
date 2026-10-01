@@ -3,8 +3,11 @@ services:
     build:
       context: .
       dockerfile: agent/Dockerfile
-    user: "10001:10001"
     command: ["workspace", "--projects", "/config/projects.yaml", "--host", "0.0.0.0", "--port", "8766"]
+    environment:
+      AI_WORKSHOP_WORKSPACE_TOKEN: "${AI_WORKSHOP_WORKSPACE_TOKEN:?set AI_WORKSHOP_WORKSPACE_TOKEN}"
+      AI_WORKSHOP_UID: "${AI_WORKSHOP_UID:-10001}"
+      AI_WORKSHOP_GID: "${AI_WORKSHOP_GID:-10001}"
     ports:
       - "127.0.0.1:8766:8766"
     volumes:
@@ -21,34 +24,8 @@ services:
     networks:
       - ai-workshop
 
-  browser:
-    build:
-      context: .
-      dockerfile: browser/Dockerfile
-    init: true
-    shm_size: "1gb"
-    command: ["browser", "--profile", "/data/browser-profile", "--artifacts", "/data/artifacts", "--host", "0.0.0.0", "--port", "8767"]
-    ports:
-      - "127.0.0.1:8767:8767"
-    volumes:
-      - type: volume
-        source: ai-workshop-browser-profile
-        target: /data/browser-profile
-      - type: volume
-        source: ai-workshop-browser-artifacts
-        target: /data/artifacts
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8767/health', timeout=2)"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    networks:
-      - ai-workshop
-
 volumes:
   ai-workshop-cache:
-  ai-workshop-browser-profile:
-  ai-workshop-browser-artifacts:
 
 networks:
   ai-workshop:

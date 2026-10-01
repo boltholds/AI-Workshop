@@ -16,23 +16,12 @@ jobs:
       - name: Install
         run: uv sync
       - name: Test
-        run: uv run pytest tests/unit tests/integration --ignore=tests/integration/browser -v
-
-  browser:
-    runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright/python:v1.63.0-noble
-      options: --init --ipc=host
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - name: Install
-        run: uv sync
-      - name: Browser tests
-        run: uv run pytest tests/unit/browser tests/integration/browser tests/e2e/test_browser_diagnostics.py -v
+        run: uv run pytest tests/unit tests/integration -v
 
   docker-smoke:
     runs-on: ubuntu-latest
+    env:
+      AI_WORKSHOP_WORKSPACE_TOKEN: ci-workspace-token-for-tests-only
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -40,6 +29,8 @@ jobs:
         run: uv sync
       - name: Configure fixture project
         run: |
+          echo "AI_WORKSHOP_UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "AI_WORKSHOP_GID=$(id -g)" >> "$GITHUB_ENV"
           cat > config/projects.local.yaml <<YAML
           projects:
             fixture:
@@ -47,21 +38,52 @@ jobs:
               container: /workspace/fixture
               mode: rw
           YAML
-          uv run ai-workshop compose render --projects config/projects.local.yaml --output .workshop/compose.projects.yaml
-      - name: Build and start core services
+          uv run ai-workshop compose render \
+            --projects config/projects.local.yaml \
+            --output .workshop/compose.projects.yaml
+      - name: Build and start workspace
         run: |
-          docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d --build agent-workspace browser
-          for port in 8766 8767; do
-            ok=0
-            for i in $(seq 1 45); do
-              if curl --fail --silent "http://127.0.0.1:${port}/health"; then ok=1; break; fi
-              sleep 2
-            done
-            if [ "$ok" -ne 1 ]; then
-              docker compose -f compose.yaml -f .workshop/compose.projects.yaml logs
-              exit 1
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d --build agent-workspace
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8766/health; then
+              break
             fi
+            sleep 2
           done
-      - name: Stop services
+          test "$(curl --silent --output /tmp/unauth.json --write-out '%{http_code}' http://127.0.0.1:8766/v1/projects)" = "401"
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml exec -T agent-workspace bash -lc '
+            python --version &&
+            node --version &&
+            npm --version &&
+            pnpm --version &&
+            uv --version &&
+            poetry --version &&
+            pytest --version &&
+            rg --version &&
+            fd --version &&
+            jq --version &&
+            curl --version &&
+            wget --version
+          '
+      - name: MCP end-to-end smoke
+        run: |
+          uv run ai-workshop gateway --workspace-url http://127.0.0.1:8766 > /tmp/ai-workshop-gateway.log 2>&1 &
+          GATEWAY_PID=$!
+          trap 'kill $GATEWAY_PID 2>/dev/null || true' EXIT
+          READY=0
+          for i in $(seq 1 30); do
+            CODE="$(curl --silent --output /dev/null --write-out '%{http_code}' --connect-timeout 1 --max-time 2 -X POST http://127.0.0.1:8765/mcp || true)"
+            if [ "$CODE" != "000" ]; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" != "1" ]; then
+            cat /tmp/ai-workshop-gateway.log
+            exit 1
+          fi
+          uv run python tests/e2e/mcp_smoke.py
+      - name: Stop workspace
         if: always()
         run: docker compose -f compose.yaml -f .workshop/compose.projects.yaml down -v

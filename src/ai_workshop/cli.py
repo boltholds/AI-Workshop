@@ -22,18 +22,13 @@ def build_parser() -> argparse.ArgumentParser:
     workspace.add_argument("--projects", type=Path, required=True)
     workspace.add_argument("--host", default="0.0.0.0")
     workspace.add_argument("--port", type=int, default=8766)
+    workspace.add_argument("--token", default=os.getenv("AI_WORKSHOP_WORKSPACE_TOKEN"))
 
     gateway = commands.add_parser("gateway")
     gateway.add_argument("--workspace-url", default=os.getenv("AI_WORKSHOP_WORKSPACE_URL", "http://127.0.0.1:8766"))
     gateway.add_argument("--host", default=os.getenv("AI_WORKSHOP_MCP_HOST", "127.0.0.1"))
     gateway.add_argument("--port", type=int, default=int(os.getenv("AI_WORKSHOP_MCP_PORT", "8765")))
-    gateway.add_argument("--browser-url", default=os.getenv("AI_WORKSHOP_BROWSER_URL"))
-
-    browser = commands.add_parser("browser")
-    browser.add_argument("--profile", type=Path, default=Path("/data/browser-profile"))
-    browser.add_argument("--artifacts", type=Path, default=Path("/data/artifacts"))
-    browser.add_argument("--host", default="0.0.0.0")
-    browser.add_argument("--port", type=int, default=8767)
+    gateway.add_argument("--workspace-token", default=os.getenv("AI_WORKSHOP_WORKSPACE_TOKEN"))
     return parser
 
 
@@ -47,18 +42,17 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
         from ai_workshop.workspace.app import create_app
 
+        if not args.token:
+            raise SystemExit("AI_WORKSHOP_WORKSPACE_TOKEN or --token is required")
         config = WorkshopConfig.load(args.projects)
-        uvicorn.run(create_app(config), host=args.host, port=args.port)
+        uvicorn.run(create_app(config, workspace_token=args.token), host=args.host, port=args.port)
         return 0
     if args.command == "gateway":
         from ai_workshop.gateway.server import run_gateway
 
-        run_gateway(args.workspace_url, host=args.host, port=args.port, browser_url=args.browser_url)
-        return 0
-    if args.command == "browser":
-        import uvicorn
-        from ai_workshop.browser.app import create_browser_app
-        uvicorn.run(create_browser_app(args.profile, args.artifacts), host=args.host, port=args.port)
+        if not args.workspace_token:
+            raise SystemExit("AI_WORKSHOP_WORKSPACE_TOKEN or --workspace-token is required")
+        run_gateway(args.workspace_url, token=args.workspace_token, host=args.host, port=args.port)
         return 0
     return 2
 

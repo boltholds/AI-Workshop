@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 
 class ExecRequest(BaseModel):
     project_id: str
-    argv: list[str]
+    argv: list[str] = Field(min_length=1)
+    cwd: str = "."
     env: dict[str, str] = Field(default_factory=dict)
     timeout_seconds: float = 60.0
     run_id: UUID = Field(default_factory=uuid4)
