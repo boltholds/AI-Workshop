@@ -32,7 +32,7 @@ def test_keep_frames_writes_only_adaptively_selected_frames(tmp_path: Path):
     seen={}
     def decoder(path, frames_dir=None):
         seen["frames_dir"]=frames_dir
-        values=decoded_frames()
+        values=frames()
         values.insert(1, FrameSample(50, values[0].image.copy()))
         return values
     artifact=recording(tmp_path)
