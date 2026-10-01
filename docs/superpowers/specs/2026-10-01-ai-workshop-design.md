@@ -17,17 +17,17 @@ AI Workshop uses Docker Compose with multiple isolated services.
 
 The central service is `agent-workspace`. Project directories from the host are mounted into this container as explicit read-write bind mounts. Changes made inside the container are therefore reflected immediately in the real host project directories.
 
-The environment is composed of:
+The environment is composed of containerized runtime services plus a narrow host-side control plane:
 
-- `agent-workspace` — shell, filesystem, Git, Python, Node.js, build tools, test tools, and MCP-facing agent capabilities.
+- `agent-workspace` — shell, filesystem, Git, Python, Node.js, build tools, test tools, and agent capabilities.
 - `browser` — persistent Chromium/Playwright environment for interactive and automated browser work.
 - `plc-web-frontend` — local PLC Web frontend runtime when enabled.
 - `plc-web-backend` — local PLC Web backend runtime when enabled.
 - `titan` — isolated Titan runtime with its own development token and configuration.
 - `postgres` / Supabase services — local database and application infrastructure.
-- `mcp-gateway` — the control plane exposed to ChatGPT.
+- `mcp-gateway` — a host-side Streamable HTTP MCP/control process exposed to ChatGPT. It does not directly execute project code; it forwards workspace/browser operations to loopback-only container APIs and owns bounded Docker Compose lifecycle commands.
 
-All services communicate through a private Docker network.
+Container services communicate through a private Docker network. Only the private workspace/browser control APIs are published to host loopback for the gateway; they are not bound to the LAN. This keeps the host Docker socket out of every container while still allowing cross-platform service control.
 
 ## 3. Host Workspace Mounts
 
@@ -260,7 +260,7 @@ The design intentionally avoids mounting:
 
 Mounting the host Docker socket would effectively defeat the container boundary and is therefore excluded from the default architecture.
 
-Service-management access should instead be provided through an explicit Workshop control layer or another isolated mechanism with bounded operations.
+Service-management access is provided by the host-side MCP/control gateway using fixed, allowlisted Docker Compose operations. The gateway is bound to host loopback by default and container control APIs are also loopback-only. The model never receives a raw Docker socket or an unrestricted host shell.
 
 ## 13. Snapshot and Recovery
 
