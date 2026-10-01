@@ -68,41 +68,26 @@ class AdaptiveFrameSelector:
         candidates = [FrameCandidate(frame=frames[0], change_score=0.0, selected=True)]
         selected = [frames[0]]
         last_selected_ts = frames[0].timestamp_ms
-        previous = frames[0].image
+        reference = frames[0].image
 
         for sample in frames[1:]:
-            score, boxes = self._difference(previous, sample.image, config.sensitivity)
+            score, boxes = self._difference(reference, sample.image, config.sensitivity)
             significant = score >= self._MIN_CHANGED_FRACTION[config.sensitivity]
             rate_ok = sample.timestamp_ms - last_selected_ts >= min_interval_ms
             is_selected = significant and rate_ok
-            candidates.append(
-                FrameCandidate(
-                    frame=sample,
-                    change_score=score,
-                    changed_boxes=boxes,
-                    selected=is_selected,
-                )
-            )
+            candidates.append(FrameCandidate(frame=sample, change_score=score, changed_boxes=boxes, selected=is_selected))
             if is_selected:
                 selected.append(sample)
                 last_selected_ts = sample.timestamp_ms
-            previous = sample.image
+                reference = sample.image
 
         return SelectionResult(candidates=candidates, selected=selected, config=config)
 
-    def _difference(
-        self,
-        before: np.ndarray,
-        after: np.ndarray,
-        sensitivity: Sensitivity,
-    ) -> tuple[float, list[dict[str, int]]]:
+    def _difference(self, before: np.ndarray, after: np.ndarray, sensitivity: Sensitivity) -> tuple[float, list[dict[str, int]]]:
         if before.shape != after.shape:
             raise ValueError("all frames must have the same dimensions")
         delta = cv2.absdiff(before, after)
-        if delta.ndim == 3:
-            magnitude = np.max(delta, axis=2)
-        else:
-            magnitude = delta
+        magnitude = np.max(delta, axis=2) if delta.ndim == 3 else delta
         mask = (magnitude >= self._PIXEL_THRESHOLDS[sensitivity]).astype(np.uint8) * 255
         changed = int(np.count_nonzero(mask))
         score = changed / float(mask.size)
