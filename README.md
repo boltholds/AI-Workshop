@@ -63,3 +63,22 @@ doctor
 Project restore is confirmation-token gated and preserves pre-existing staged, unstaged, and untracked Git state. Persistent service state is handled through optional adapters rather than assuming a specific database.
 
 See `docs/workflows/debug-ui.md` for the full project-agnostic workflow.
+
+
+## One-command local bootstrap
+
+Windows:
+
+~~~powershell
+.\scripts\bootstrap.ps1 -Project C:\Code\MyProject
+~~~
+
+macOS/Linux:
+
+~~~bash
+bash scripts/bootstrap.sh --project /path/to/MyProject
+~~~
+
+The bootstrap preserves existing local secrets/configuration, starts the workspace and browser, starts the host-side MCP gateway, and finishes with ai-workshop doctor.
+
+To connect the private localhost MCP endpoint to ChatGPT without publishing it to the internet, use Secure MCP Tunnel. See docs/chatgpt-setup.md.
