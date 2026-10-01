@@ -1,0 +1,23 @@
+profiles:
+  dev:
+    services: [app, state]
+
+services:
+  app:
+    source:
+      kind: build
+      project_id: app
+      context: .
+    command: ["python", "-m", "http.server", "8000"]
+    ports:
+      - container: 8000
+        host: 18000
+    depends_on: [state]
+
+  state:
+    source:
+      kind: image
+      image: "example/state-service:1"
+    volumes:
+      - name: data
+        target: /var/lib/state
