@@ -55,3 +55,24 @@ def test_incremental_subthreshold_changes_accumulate_against_last_selected():
     result=AdaptiveFrameSelector().select(frames,SelectionConfig(sensitivity="auto",max_fps=20))
     assert len(result.selected)>=2
     assert result.selected[-1].timestamp_ms>=250
+
+
+def test_auto_threshold_adapts_to_noisy_background_but_keeps_real_motion():
+    rng=np.random.default_rng(42)
+    base=np.full((100,100,3),80,dtype=np.uint8)
+    noise=rng.integers(-15,16,base.shape)
+    noisy=np.clip(base.astype(np.int16)+noise,0,255).astype(np.uint8)
+    noise_only=AdaptiveFrameSelector().select(
+        [frame(0,base),frame(200,noisy)],
+        SelectionConfig(sensitivity="auto",max_fps=10),
+    )
+    assert len(noise_only.selected)==1
+
+    moved=noisy.copy()
+    moved[30:50,30:50]=220
+    with_motion=AdaptiveFrameSelector().select(
+        [frame(0,base),frame(200,moved)],
+        SelectionConfig(sensitivity="auto",max_fps=10),
+    )
+    assert len(with_motion.selected)==2
+    assert with_motion.candidates[1].pixel_threshold > 15
