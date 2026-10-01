@@ -16,12 +16,13 @@ jobs:
       - name: Install
         run: uv sync
       - name: Test
-        run: uv run pytest tests/unit tests/integration -v
+        run: uv run pytest tests/unit tests/integration --ignore=tests/integration/browser -v
 
   docker-smoke:
     runs-on: ubuntu-latest
     env:
       AI_WORKSHOP_WORKSPACE_TOKEN: ci-workspace-token-for-tests-only
+      AI_WORKSHOP_BROWSER_TOKEN: ci-browser-token-for-tests-only
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -87,3 +88,39 @@ jobs:
       - name: Stop workspace
         if: always()
         run: docker compose -f compose.yaml -f .workshop/compose.projects.yaml down -v
+
+
+  browser-diagnostics:
+    runs-on: ubuntu-latest
+    env:
+      AI_WORKSHOP_WORKSPACE_TOKEN: ci-workspace-token-for-tests-only
+      AI_WORKSHOP_BROWSER_TOKEN: ci-browser-token-for-tests-only
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build browser image
+        run: docker compose build browser
+      - name: Browser runtime and temporal composite tests
+        run: |
+          docker compose run --rm --no-deps \
+            -v "$GITHUB_WORKSPACE:/work" \
+            --entrypoint bash browser -lc '
+              python -m pip install --user -q pytest &&
+              cd /work &&
+              python -m pytest tests/integration/browser tests/e2e/test_browser_diagnostics.py -v
+            '
+      - name: Browser service auth smoke
+        run: |
+          docker compose up -d browser
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8767/health; then
+              break
+            fi
+            sleep 2
+          done
+          test "$(curl --silent --output /tmp/browser-unauth.json --write-out '%{http_code}' http://127.0.0.1:8767/v1/console)" = "401"
+          curl --fail --silent \
+            -H "Authorization: Bearer $AI_WORKSHOP_BROWSER_TOKEN" \
+            http://127.0.0.1:8767/v1/console
+      - name: Stop browser
+        if: always()
+        run: docker compose down -v

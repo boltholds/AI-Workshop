@@ -42,3 +42,14 @@ def test_agent_uses_dynamic_non_root_uid_gid_mapping():
     entrypoint = Path("agent/entrypoint.sh").read_text(encoding="utf-8")
     assert "gosu" in entrypoint
     assert '"$AI_WORKSHOP_UID" = "0"' in entrypoint
+
+
+def test_browser_service_is_loopback_only_and_persistent():
+    doc = yaml.safe_load(Path("compose.yaml").read_text(encoding="utf-8"))
+    browser = doc["services"]["browser"]
+    assert browser["ports"] == ["127.0.0.1:8767:8767"]
+    assert "AI_WORKSHOP_BROWSER_TOKEN" in browser["environment"]
+    mounts = {(v["source"], v["target"]) for v in browser["volumes"]}
+    assert ("ai-workshop-browser-profile", "/data/browser-profile") in mounts
+    assert ("ai-workshop-browser-artifacts", "/data/artifacts") in mounts
+    assert browser["init"] is True
