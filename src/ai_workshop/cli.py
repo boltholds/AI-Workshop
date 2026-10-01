@@ -18,6 +18,14 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--projects", type=Path, required=True)
     render.add_argument("--output", type=Path, required=True)
 
+    services = commands.add_parser("services")
+    services_commands = services.add_subparsers(dest="services_command", required=True)
+    services_render = services_commands.add_parser("render")
+    services_render.add_argument("--projects", type=Path, required=True)
+    services_render.add_argument("--services", type=Path, required=True)
+    services_render.add_argument("--compose-output", type=Path, required=True)
+    services_render.add_argument("--registry-output", type=Path, required=True)
+
     workspace = commands.add_parser("workspace")
     workspace.add_argument("--projects", type=Path, required=True)
     workspace.add_argument("--host", default="0.0.0.0")
@@ -53,6 +61,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "compose" and args.compose_command == "render":
         config = WorkshopConfig.load(args.projects)
         render_project_override(config, args.output)
+        return 0
+    if args.command == "services" and args.services_command == "render":
+        from ai_workshop.services.config import ServiceConfig
+        from ai_workshop.services.render import render_service_override
+
+        projects = WorkshopConfig.load(args.projects)
+        services_config = ServiceConfig.load(args.services)
+        render_service_override(
+            services_config,
+            projects,
+            compose_path=args.compose_output,
+            registry_path=args.registry_output,
+        )
         return 0
     if args.command == "workspace":
         import uvicorn
