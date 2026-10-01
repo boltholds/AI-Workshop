@@ -1,0 +1,29 @@
+services:
+  agent-workspace:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    user: "10001:10001"
+    command: ["ai-workshop", "workspace", "--projects", "/config/projects.yaml", "--host", "0.0.0.0", "--port", "8766"]
+    ports:
+      - "127.0.0.1:8766:8766"
+    volumes:
+      - type: bind
+        source: ./config/projects.local.yaml
+        target: /config/projects.yaml
+        read_only: true
+      - ai-workshop-cache:/home/workshop/.cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8766/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ai-workshop
+
+volumes:
+  ai-workshop-cache:
+
+networks:
+  ai-workshop:
+    name: ai-workshop
