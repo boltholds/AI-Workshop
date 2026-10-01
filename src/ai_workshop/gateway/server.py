@@ -4,10 +4,10 @@ from ai_workshop.gateway.client import WorkspaceClient
 from ai_workshop.gateway.errors import GatewayError
 
 
-def build_server(workspace_url: str):
+def build_server(workspace_url: str, *, token: str):
     from mcp.server.mcpserver import MCPServer
 
-    client = WorkspaceClient(workspace_url)
+    client = WorkspaceClient(workspace_url, token=token)
     server = MCPServer("AI Workshop")
 
     def safe(callable_, *args, **kwargs):
@@ -61,8 +61,8 @@ def build_server(workspace_url: str):
     return server
 
 
-def run_gateway(workspace_url: str, host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = build_server(workspace_url)
+def run_gateway(workspace_url: str, *, token: str, host: str = "127.0.0.1", port: int = 8765) -> None:
+    server = build_server(workspace_url, token=token)
     server.run(
         transport="streamable-http",
         host=host,
