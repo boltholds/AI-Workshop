@@ -32,3 +32,22 @@ def test_rejects_unregistered_service(tmp_path: Path):
 def test_registry_rejects_duplicate_service_id(tmp_path: Path):
     with pytest.raises(ValueError, match="duplicate service"):
         ServiceRegistry([sample_service(tmp_path, "web"), sample_service(tmp_path, "web")])
+
+
+def test_registry_loads_generated_yaml(tmp_path: Path):
+    registry_path = tmp_path / "registry.yaml"
+    compose = tmp_path / "compose.services.yaml"
+    compose.write_text("services: {}\n", encoding="utf-8")
+    registry_path.write_text(f"""
+services:
+  web:
+    compose_project: workshop-dev
+    working_dir: {tmp_path}
+    compose_files:
+      - {compose}
+    compose_service: web
+    allowed_operations: [status, logs, restart]
+""", encoding="utf-8")
+    registry = ServiceRegistry.load(registry_path)
+    assert registry.list_ids() == ["web"]
+    assert registry.require("web").compose_files == (compose.resolve(),)
