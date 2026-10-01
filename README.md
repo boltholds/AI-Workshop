@@ -19,13 +19,15 @@ AI Workshop is an isolated local development environment that gives an AI agent 
    docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d agent-workspace
    ```
 
-4. Start the MCP gateway on the host:
+4. Create a local workspace token (for example with a password manager or `openssl rand -hex 32`) and set `AI_WORKSHOP_WORKSPACE_TOKEN`.
+5. Start the MCP gateway on the host:
 
    ```bash
-   ai-workshop gateway --workspace-url http://127.0.0.1:8766
+   AI_WORKSHOP_WORKSPACE_TOKEN="<same-token>" \
+     ai-workshop gateway --workspace-url http://127.0.0.1:8766
    ```
 
-The MCP endpoint is served on host loopback at port `8765`. The workspace control API is also exposed only on loopback at port `8766`.
+The MCP endpoint is served on host loopback at port `8765`. The workspace control API is also exposed only on loopback at port `8766` and requires the shared Workshop bearer token for every `/v1/*` call.
 
 ## Trust boundary
 
