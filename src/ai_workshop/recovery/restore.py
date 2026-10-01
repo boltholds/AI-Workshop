@@ -53,6 +53,13 @@ class RestoreService:
         delete_paths = sorted(current_paths - snapshot_paths)
         restore_paths = sorted(snapshot_paths - current_paths)
 
+        current_state_digest = hashlib.sha256(
+            json.dumps(
+                {"head": current_head, "file_hashes": current_hashes},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
         payload = {
             "snapshot_id": snapshot_id,
             "project_id": manifest.project_id,
@@ -61,6 +68,7 @@ class RestoreService:
             "reset_paths": reset_paths,
             "delete_paths": delete_paths,
             "restore_paths": restore_paths,
+            "current_state_digest": current_state_digest,
         }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")

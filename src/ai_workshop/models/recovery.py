@@ -11,6 +11,7 @@ class RestorePreview(BaseModel):
     reset_paths: list[str] = Field(default_factory=list)
     delete_paths: list[str] = Field(default_factory=list)
     restore_paths: list[str] = Field(default_factory=list)
+    current_state_digest: str
     digest: str
 
 
