@@ -46,8 +46,8 @@ class WorkspaceClient:
     def file_search(self, project_id: str, needle: str, path: str = ".") -> list[dict[str, Any]]:
         return list(self._request("POST", "/v1/files/search", json={"project_id": project_id, "needle": needle, "path": path})["matches"])
 
-    def shell_exec(self, project_id: str, argv: list[str], *, env: dict[str, str] | None = None, timeout_seconds: float = 60.0) -> dict[str, Any]:
-        return self._request("POST", "/v1/shell/exec", json={"project_id": project_id, "argv": argv, "env": env or {}, "timeout_seconds": timeout_seconds})
+    def shell_exec(self, project_id: str, argv: list[str], *, cwd: str = ".", env: dict[str, str] | None = None, timeout_seconds: float = 60.0) -> dict[str, Any]:
+        return self._request("POST", "/v1/shell/exec", json={"project_id": project_id, "argv": argv, "cwd": cwd, "env": env or {}, "timeout_seconds": timeout_seconds})
 
     def shell_cancel(self, run_id: str) -> bool:
         return bool(self._request("POST", "/v1/shell/cancel", json={"run_id": run_id})["cancelled"])
