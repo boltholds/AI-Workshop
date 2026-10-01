@@ -33,3 +33,16 @@ def test_gateway_accepts_optional_service_registry():
         "--service-registry", ".workshop/service-registry.yaml",
     ])
     assert str(args.service_registry) == ".workshop/service-registry.yaml"
+
+
+def test_cli_exposes_service_profile_rendering():
+    parser = build_parser()
+    args = parser.parse_args([
+        "services", "render",
+        "--projects", "config/projects.local.yaml",
+        "--services", "config/services.local.yaml",
+        "--compose-output", ".workshop/compose.services.yaml",
+        "--registry-output", ".workshop/service-registry.yaml",
+    ])
+    assert args.command == "services"
+    assert args.services_command == "render"
