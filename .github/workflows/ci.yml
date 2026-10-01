@@ -68,14 +68,20 @@ jobs:
           uv run ai-workshop gateway --workspace-url http://127.0.0.1:8766 > /tmp/ai-workshop-gateway.log 2>&1 &
           GATEWAY_PID=$!
           trap 'kill $GATEWAY_PID 2>/dev/null || true' EXIT
+          READY=0
           for i in $(seq 1 30); do
-            if uv run python tests/e2e/mcp_smoke.py; then
-              exit 0
+            CODE="$(curl --silent --output /dev/null --write-out '%{http_code}' --connect-timeout 1 --max-time 2 -X POST http://127.0.0.1:8765/mcp || true)"
+            if [ "$CODE" != "000" ]; then
+              READY=1
+              break
             fi
             sleep 1
           done
-          cat /tmp/ai-workshop-gateway.log
-          exit 1
+          if [ "$READY" != "1" ]; then
+            cat /tmp/ai-workshop-gateway.log
+            exit 1
+          fi
+          uv run python tests/e2e/mcp_smoke.py
       - name: Stop workspace
         if: always()
         run: docker compose -f compose.yaml -f .workshop/compose.projects.yaml down -v
