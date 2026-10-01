@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import hmac
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -62,7 +63,9 @@ class DiagnosticsRequest(RecordingStopRequest):
     keep_frames: bool = False
 
 
-def create_browser_app(profile_dir: Path, artifact_root: Path, *, executable_path: Path | str | None = None, worker: BrowserWorker | None = None) -> FastAPI:
+def create_browser_app(profile_dir: Path, artifact_root: Path, *, executable_path: Path | str | None = None, worker: BrowserWorker | None = None, browser_token: str) -> FastAPI:
+    if not browser_token:
+        raise ValueError("browser token must not be empty")
     artifact_root = Path(artifact_root).resolve()
     worker = worker or BrowserWorker(lambda: BrowserEngine(profile_dir, artifact_root, executable_path=executable_path))
 
@@ -75,6 +78,20 @@ def create_browser_app(profile_dir: Path, artifact_root: Path, *, executable_pat
             worker.stop()
 
     app = FastAPI(title="AI Workshop Browser", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+    @app.middleware("http")
+    async def browser_auth(request: Request, call_next):
+        if request.url.path.startswith("/v1/"):
+            auth = request.headers.get("authorization", "")
+            expected = f"Bearer {browser_token}"
+            if not hmac.compare_digest(auth, expected):
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": {"code": "UNAUTHORIZED", "message": "Valid browser token required"}},
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        return await call_next(request)
 
     def invoke(method: str, *args: Any, **kwargs: Any):
         try:
