@@ -13,14 +13,23 @@ AI Workshop is an isolated local development environment that gives an AI agent 
      --output .workshop/compose.projects.yaml
    ```
 
-3. Start the containerized workspace:
+3. On native Linux, export your host UID/GID so bind-mounted project files stay writable by the non-root agent process:
+
+   ```bash
+   export AI_WORKSHOP_UID="$(id -u)"
+   export AI_WORKSHOP_GID="$(id -g)"
+   ```
+
+   Docker Desktop users can normally keep the defaults.
+
+4. Start the containerized workspace:
 
    ```bash
    docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d agent-workspace
    ```
 
-4. Create a local workspace token (for example with a password manager or `openssl rand -hex 32`) and set `AI_WORKSHOP_WORKSPACE_TOKEN`.
-5. Start the MCP gateway on the host:
+5. Create a local workspace token (for example with a password manager or `openssl rand -hex 32`) and set `AI_WORKSHOP_WORKSPACE_TOKEN`.
+6. Start the MCP gateway on the host:
 
    ```bash
    AI_WORKSHOP_WORKSPACE_TOKEN="<same-token>" \
