@@ -33,13 +33,28 @@ class RegisteredService:
 
 
 class ServiceRegistry:
-    def __init__(self, services: list[RegisteredService] | tuple[RegisteredService, ...]):
+    def __init__(
+        self,
+        services: list[RegisteredService] | tuple[RegisteredService, ...],
+        *,
+        profiles: dict[str, frozenset[str]] | None = None,
+    ):
         mapped: dict[str, RegisteredService] = {}
         for service in services:
             if service.service_id in mapped:
                 raise ValueError(f"duplicate service: {service.service_id}")
             mapped[service.service_id] = service
         self._services = mapped
+
+        normalized_profiles: dict[str, frozenset[str]] = {}
+        for profile_id, service_ids in (profiles or {}).items():
+            missing = sorted(set(service_ids) - set(mapped))
+            if missing:
+                raise ValueError(
+                    f"profile {profile_id} references unknown service: {missing[0]}"
+                )
+            normalized_profiles[profile_id] = frozenset(service_ids)
+        self._profiles = normalized_profiles
 
     @classmethod
     def load(cls, path: Path) -> "ServiceRegistry":
@@ -74,10 +89,22 @@ class ServiceRegistry:
                     allowed_operations=frozenset(data.get("allowed_operations", [])),
                 )
             )
-        return cls(services)
+        profiles_raw = raw.get("profiles") or {}
+        if not isinstance(profiles_raw, dict):
+            raise ValueError("registry profiles must be a mapping")
+        profiles = {
+            str(profile_id): frozenset(str(service_id) for service_id in (service_ids or []))
+            for profile_id, service_ids in profiles_raw.items()
+        }
+        return cls(services, profiles=profiles)
 
-    def list_ids(self) -> list[str]:
-        return sorted(self._services)
+    def list_ids(self, profile_id: str | None = None) -> list[str]:
+        if profile_id is None:
+            return sorted(self._services)
+        service_ids = self._profiles.get(profile_id)
+        if service_ids is None:
+            raise KeyError(f"unknown service profile: {profile_id}")
+        return sorted(service_ids)
 
     def require(self, service_id: str) -> RegisteredService:
         service = self._services.get(service_id)
