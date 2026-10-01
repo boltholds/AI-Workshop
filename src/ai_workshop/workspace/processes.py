@@ -31,7 +31,7 @@ class ProcessService:
         return True
 
     def exec(self, request: ExecRequest) -> ExecResult:
-        cwd = self.policy.project_root(request.project_id)
+        cwd = self.policy.resolve(request.project_id, request.cwd)
         env = os.environ.copy()
         env.update(request.env)
         proc = subprocess.Popen(
