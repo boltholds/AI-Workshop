@@ -61,3 +61,18 @@ def test_explicit_cancel(tmp_path: Path):
     assert svc.cancel(run_id) is True
     thread.join(timeout=2)
     assert box["result"].cancelled is True
+
+
+def test_exec_uses_relative_cwd(tmp_path: Path):
+    (tmp_path / "frontend").mkdir()
+    result = service(tmp_path).exec(
+        ExecRequest(project_id="p", cwd="frontend", argv=["python", "-c", "import os; print(os.getcwd())"])
+    )
+    assert Path(result.stdout.strip()) == (tmp_path / "frontend").resolve()
+
+
+def test_exec_rejects_cwd_traversal(tmp_path: Path):
+    with pytest.raises(ValueError, match="outside project root"):
+        service(tmp_path).exec(
+            ExecRequest(project_id="p", cwd="../escape", argv=["python", "-c", "print(1)"])
+        )
