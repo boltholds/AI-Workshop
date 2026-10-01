@@ -4,7 +4,7 @@ from ai_workshop.gateway.client import WorkspaceClient
 from ai_workshop.gateway.errors import GatewayError
 
 
-def build_server(workspace_url: str, *, token: str):
+def build_server(workspace_url: str, *, token: str, browser_url: str | None = None, browser_token: str | None = None):
     from mcp.server.mcpserver import MCPServer
 
     client = WorkspaceClient(workspace_url, token=token)
@@ -58,11 +58,32 @@ def build_server(workspace_url: str, *, token: str):
     def git_diff(project_id: str, staged: bool = False) -> str:
         return safe(client.git_diff, project_id, staged=staged)
 
+    if browser_url:
+        from ai_workshop.gateway.browser_client import BrowserClient
+        from ai_workshop.gateway.browser_tools import register_browser_tools
+
+        if not browser_token:
+            raise ValueError("browser token is required when browser_url is configured")
+        register_browser_tools(server, BrowserClient(browser_url, token=browser_token))
+
     return server
 
 
-def run_gateway(workspace_url: str, *, token: str, host: str = "127.0.0.1", port: int = 8765) -> None:
-    server = build_server(workspace_url, token=token)
+def run_gateway(
+    workspace_url: str,
+    *,
+    token: str,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    browser_url: str | None = None,
+    browser_token: str | None = None,
+) -> None:
+    server = build_server(
+        workspace_url,
+        token=token,
+        browser_url=browser_url,
+        browser_token=browser_token,
+    )
     server.run(
         transport="streamable-http",
         host=host,
