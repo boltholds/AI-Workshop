@@ -4,6 +4,8 @@ import base64
 import json
 from typing import Literal
 
+from mcp.types import ImageContent, TextContent
+
 from ai_workshop.gateway.browser_client import BrowserClient
 
 
@@ -30,8 +32,6 @@ def _region(
 
 
 def register_browser_tools(server, client: BrowserClient) -> None:
-    from mcp.types import ImageContent, TextContent
-
     @server.tool()
     def browser_navigate(url: str, session_id: str | None = None) -> str:
         """Navigate the persistent browser or an active recording session."""
