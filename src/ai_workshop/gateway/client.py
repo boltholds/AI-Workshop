@@ -8,11 +8,22 @@ from ai_workshop.gateway.errors import sanitize_workspace_error
 
 
 class WorkspaceClient:
-    def __init__(self, base_url: str, *, transport: httpx.BaseTransport | None = None, timeout: float = 60.0):
-        self._client = httpx.Client(base_url=base_url.rstrip("/"), transport=transport, timeout=timeout)
+    def __init__(self, base_url: str, *, token: str, transport: httpx.BaseTransport | None = None, timeout: float = 60.0):
+        if not token:
+            raise ValueError("workspace token must not be empty")
+        self._client = httpx.Client(
+            base_url=base_url.rstrip("/"),
+            transport=transport,
+            timeout=timeout,
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
-        response = self._client.request(method, path, **kwargs)
+        try:
+            response = self._client.request(method, path, **kwargs)
+        except httpx.RequestError as exc:
+            from ai_workshop.gateway.errors import GatewayError
+            raise GatewayError("WORKSPACE_UNAVAILABLE", "Workspace service could not be reached") from exc
         if response.is_error:
             raise sanitize_workspace_error(response)
         return response.json()
