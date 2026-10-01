@@ -40,14 +40,19 @@ class DiagnosticService:
         options = options or DiagnosticOptions()
         session_id = recording.session_id
         video_path = self.store.root / recording.video.path
-        frames_dir = self.store.session_dir(session_id) / "frames" if options.keep_frames else None
         artifacts = [recording.video]
         try:
-            frames = self.decoder(video_path, frames_dir=frames_dir)
+            frames = self.decoder(video_path, frames_dir=None)
             frames = self._crop_frames(frames, recording)
             selection = AdaptiveFrameSelector().select(
                 frames, SelectionConfig(sensitivity=options.sensitivity, max_fps=options.max_fps)
             )
+            if options.keep_frames:
+                from PIL import Image
+                frames_dir = self.store.session_dir(session_id) / "frames"
+                frames_dir.mkdir(parents=True, exist_ok=True)
+                for index, sample in enumerate(selection.selected):
+                    Image.fromarray(sample.image).save(frames_dir / f"{index:06d}.png", format="PNG")
             variants = ["neutral", "time-gradient"] if options.variants == "both" else [options.variants]
             for variant in variants:
                 image = self.renderer.render(selection, variant=variant, legend=options.legend)
