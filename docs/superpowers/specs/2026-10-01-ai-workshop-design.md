@@ -9,7 +9,7 @@ AI Workshop is a local, isolated development environment that gives an AI agent 
 
 The primary goal is to let the agent complete an end-to-end engineering loop against real project folders on the host machine: inspect code, modify files, run tests, start services, reproduce issues in a browser, inspect runtime state, capture diagnostics, and review Git diffs.
 
-The initial target is PLC Web and Titan, but the architecture must remain project-agnostic.
+AI Workshop is a universal project-agnostic sandbox. PLC Web and Titan are initial real-world consumers and examples only; no core interface, service name, lifecycle rule, or storage model may depend on them.
 
 ## 2. Core Architecture
 
@@ -218,22 +218,22 @@ Application source code remains on the host through bind mounts.
 
 ## 10. Local Infrastructure
 
-Workshop may run isolated copies of the full development stack.
+Workshop may run isolated copies of arbitrary development stacks described through project/service profiles.
 
-For PLC Web this can include:
+A profile may contain any combination of:
 
-- frontend
-- backend
-- local Postgres
-- local Supabase stack
-- Titan
-- supporting infrastructure
+- application frontends and backends
+- workers and agents
+- SQL or NoSQL databases
+- object storage and queues
+- emulators and third-party-compatible local services
+- project-specific supporting infrastructure
 
-Titan receives a dedicated Workshop token and development configuration.
+PLC Web, Titan, Postgres, and Supabase are examples of such profile components, not built-in assumptions of the core runtime.
 
-Production credentials are not required for the normal Workshop flow.
+Each profile receives its own development credentials and configuration. Production credentials are not required for the normal Workshop flow.
 
-The architecture must permit the agent to rebuild or restart individual services without destroying browser state or unrelated services.
+The architecture must permit the agent to rebuild or restart individual services without destroying browser state, unrelated services, or other mounted projects.
 
 ## 11. Secrets
 
