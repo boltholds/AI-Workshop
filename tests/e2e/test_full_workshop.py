@@ -201,10 +201,23 @@ async def workflow() -> None:
                 "argv": [
                     "python",
                     "-c",
-                    "import urllib.request;print(urllib.request.urlopen('http://sample-app:8080').read().decode())",
+                    (
+                        "import time,urllib.request\n"
+                        "deadline=time.time()+20\n"
+                        "while True:\n"
+                        "    try:\n"
+                        "        body=urllib.request.urlopen('http://sample-app:8080',timeout=1).read().decode()\n"
+                        "        break\n"
+                        "    except Exception:\n"
+                        "        assert time.time()<deadline\n"
+                        "        time.sleep(.2)\n"
+                        "print(body)"
+                    ),
                 ],
+                "timeout_seconds": 25,
             },
         )
+        assert restored_page["exit_code"] == 0, restored_page
         assert "Sample v1" in restored_page["stdout"]
 
     assert (project / "index.html").read_text(encoding="utf-8") == original_html
