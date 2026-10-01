@@ -55,9 +55,72 @@ if [[ -n "$PROJECT_ID" ]]; then
 fi
 uv run python -m ai_workshop.bootstrap "${bootstrap_args[@]}"
 
-set -a
-source "$ROOT/.env.local"
-set +a
+while IFS='=' read -r key value || [[ -n "${key:-}" ]]; do
+  case "$key" in
+    AI_WORKSHOP_*)
+      value="${value%
+if [[ "$(uname -s)" == "Linux" ]]; then
+  export AI_WORKSHOP_UID="${AI_WORKSHOP_UID:-$(id -u)}"
+  export AI_WORKSHOP_GID="${AI_WORKSHOP_GID:-$(id -g)}"
+fi
+
+mkdir -p .workshop/logs .workshop/run
+
+uv run ai-workshop compose render   --projects config/projects.local.yaml   --output .workshop/compose.projects.yaml
+
+docker compose --env-file .env.local   -f compose.yaml   -f .workshop/compose.projects.yaml   up -d --build agent-workspace browser
+
+service_registry_args=()
+if [[ -f config/services.local.yaml ]]; then
+  uv run ai-workshop services render     --projects config/projects.local.yaml     --services config/services.local.yaml     --compose-output .workshop/compose.services.yaml     --registry-output .workshop/service-registry.yaml
+
+  docker compose --env-file .env.local     -p ai-workshop-services     -f .workshop/compose.services.yaml     up -d
+
+  service_registry_args=(--service-registry .workshop/service-registry.yaml)
+fi
+
+recovery_args=()
+if [[ -f config/recovery.local.yaml ]]; then
+  recovery_args=(
+    --recovery-config config/recovery.local.yaml
+    --gateway-state .workshop/state
+    --projects config/projects.local.yaml
+  )
+fi
+
+gateway_pid_file=".workshop/run/gateway.pid"
+gateway_log=".workshop/logs/gateway.log"
+gateway_running=false
+if [[ -f "$gateway_pid_file" ]]; then
+  old_pid="$(cat "$gateway_pid_file" 2>/dev/null || true)"
+  if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+    gateway_running=true
+  fi
+fi
+
+if [[ "$gateway_running" == false ]]; then
+  nohup uv run ai-workshop gateway     --workspace-url http://127.0.0.1:8766     --browser-url http://127.0.0.1:8767     --browser-token "$AI_WORKSHOP_BROWSER_TOKEN"     "${service_registry_args[@]}"     "${recovery_args[@]}"     >"$gateway_log" 2>&1 &
+  echo "$!" > "$gateway_pid_file"
+fi
+
+for _ in $(seq 1 30); do
+  if uv run ai-workshop doctor       --projects config/projects.local.yaml       --workspace-url http://127.0.0.1:8766       --gateway-host 127.0.0.1       --gateway-port 8765       --browser-url http://127.0.0.1:8767 >/dev/null; then
+    echo "AI Workshop is ready."
+    echo "MCP endpoint: http://127.0.0.1:8765/mcp"
+    echo "Gateway log: $ROOT/$gateway_log"
+    exit 0
+  fi
+  sleep 1
+done
+
+echo "AI Workshop did not become healthy. Gateway log:" >&2
+tail -n 100 "$gateway_log" 2>/dev/null || true
+exit 1
+\r'}"
+      export "$key=$value"
+      ;;
+  esac
+done < "$ROOT/.env.local"
 
 if [[ "$(uname -s)" == "Linux" ]]; then
   export AI_WORKSHOP_UID="${AI_WORKSHOP_UID:-$(id -u)}"
