@@ -43,3 +43,23 @@ The MCP endpoint is served on host loopback at port `8765`. The workspace contro
 Only explicitly configured project folders are bind-mounted into `agent-workspace`. The base configuration does not mount the host filesystem root, home directory, `.ssh`, browser profile, credential stores, or Docker socket.
 
 The MCP gateway runs on the host and forwards project operations to the loopback-only workspace API. Docker lifecycle control is added through bounded host-side operations in the infrastructure phase rather than by mounting `/var/run/docker.sock` into a container.
+
+
+## Recovery workflow
+
+For mutation-heavy work, the intended loop is:
+
+```text
+doctor
+  → project/state snapshot
+  → reproduce
+  → edit
+  → test/build
+  → browser diagnostics when useful
+  → Git diff
+  → keep or explicit preview + confirmed restore
+```
+
+Project restore is confirmation-token gated and preserves pre-existing staged, unstaged, and untracked Git state. Persistent service state is handled through optional adapters rather than assuming a specific database.
+
+See `docs/workflows/debug-ui.md` for the full project-agnostic workflow.
