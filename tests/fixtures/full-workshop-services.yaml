@@ -1,0 +1,10 @@
+profiles:
+  e2e:
+    services: [sample-app]
+
+services:
+  sample-app:
+    source:
+      kind: build
+      project_id: sample
+      context: .

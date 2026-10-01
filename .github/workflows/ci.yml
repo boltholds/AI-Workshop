@@ -125,3 +125,91 @@ jobs:
       - name: Stop browser
         if: always()
         run: docker compose down -v
+
+  full-workshop-e2e:
+    runs-on: ubuntu-latest
+    env:
+      AI_WORKSHOP_WORKSPACE_TOKEN: ci-workspace-token-for-tests-only
+      AI_WORKSHOP_BROWSER_TOKEN: ci-browser-token-for-tests-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install host CLI
+        run: uv sync
+      - name: Initialize isolated sample project
+        run: |
+          git -C tests/fixtures/sample_project init
+          git -C tests/fixtures/sample_project config user.email test@example.com
+          git -C tests/fixtures/sample_project config user.name "AI Workshop E2E"
+          git -C tests/fixtures/sample_project add .
+          git -C tests/fixtures/sample_project commit -m initial
+          printf '%s\n' protected-outside-workspace > tests/fixtures/outside-protected.txt
+          echo "AI_WORKSHOP_UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "AI_WORKSHOP_GID=$(id -g)" >> "$GITHUB_ENV"
+      - name: Render project and service profiles
+        run: |
+          cat > config/projects.local.yaml <<YAML
+          projects:
+            sample:
+              host: "$GITHUB_WORKSPACE/tests/fixtures/sample_project"
+              container: /workspace/sample
+              mode: rw
+          YAML
+          uv run ai-workshop compose render \
+            --projects config/projects.local.yaml \
+            --output .workshop/compose.projects.yaml
+          uv run ai-workshop services render \
+            --projects config/projects.local.yaml \
+            --services tests/fixtures/full-workshop-services.yaml \
+            --compose-output .workshop/compose.services.yaml \
+            --registry-output .workshop/service-registry.yaml
+      - name: Start Workshop runtime
+        run: |
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml up -d --build agent-workspace browser
+          for url in http://127.0.0.1:8766/health http://127.0.0.1:8767/health; do
+            ready=0
+            for i in $(seq 1 60); do
+              if curl --fail --silent "$url" >/dev/null; then
+                ready=1
+                break
+              fi
+              sleep 2
+            done
+            test "$ready" = "1"
+          done
+      - name: Full MCP workflow
+        run: |
+          uv run ai-workshop gateway \
+            --workspace-url http://127.0.0.1:8766 \
+            --browser-url http://127.0.0.1:8767 \
+            --browser-token "$AI_WORKSHOP_BROWSER_TOKEN" \
+            --service-registry .workshop/service-registry.yaml \
+            > /tmp/ai-workshop-full-gateway.log 2>&1 &
+          GATEWAY_PID=$!
+          trap 'kill $GATEWAY_PID 2>/dev/null || true' EXIT
+          ready=0
+          for i in $(seq 1 30); do
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' --connect-timeout 1 --max-time 2 -X POST http://127.0.0.1:8765/mcp || true)"
+            if [ "$code" != "000" ]; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then
+            cat /tmp/ai-workshop-full-gateway.log
+            exit 1
+          fi
+          uv run ai-workshop doctor \
+            --projects config/projects.local.yaml \
+            --workspace-url http://127.0.0.1:8766 \
+            --browser-url http://127.0.0.1:8767
+          AI_WORKSHOP_E2E_PROJECT="$GITHUB_WORKSPACE/tests/fixtures/sample_project" \
+          AI_WORKSHOP_E2E_OUTSIDE="$GITHUB_WORKSPACE/tests/fixtures/outside-protected.txt" \
+            uv run pytest tests/e2e/test_full_workshop.py -v
+      - name: Stop full Workshop
+        if: always()
+        run: |
+          docker compose -p ai-workshop-services -f .workshop/compose.services.yaml down -v || true
+          docker compose -f compose.yaml -f .workshop/compose.projects.yaml down -v || true
+
