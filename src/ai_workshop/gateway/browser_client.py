@@ -50,10 +50,23 @@ class BrowserClient:
             raise GatewayError("BROWSER_UNAVAILABLE", "Browser service could not be reached") from exc
         if response.is_error:
             raise _sanitize_browser_error(response)
-        return response.json()
+        try:
+            body = response.json()
+        except Exception as exc:
+            raise GatewayError("BROWSER_PROTOCOL_ERROR", "Browser response was invalid") from exc
+        if not isinstance(body, dict):
+            raise GatewayError("BROWSER_PROTOCOL_ERROR", "Browser response was invalid")
+        return body
+
+    @staticmethod
+    def _required(body: dict[str, Any], field: str) -> Any:
+        if field not in body:
+            raise GatewayError("BROWSER_PROTOCOL_ERROR", "Browser response was invalid")
+        return body[field]
 
     def navigate(self, url: str, *, session_id: str | None = None) -> str:
-        return str(self._request("POST", "/v1/navigate", json={"url": url, "session_id": session_id})["url"])
+        body = self._request("POST", "/v1/navigate", json={"url": url, "session_id": session_id})
+        return str(self._required(body, "url"))
 
     def click(self, selector: str, *, session_id: str | None = None) -> None:
         self._request("POST", "/v1/click", json={"selector": selector, "session_id": session_id})
@@ -62,22 +75,27 @@ class BrowserClient:
         self._request("POST", "/v1/type", json={"selector": selector, "text": text, "session_id": session_id})
 
     def screenshot(self, region: dict[str, Any], *, session_id: str | None = None) -> dict[str, Any]:
-        return dict(self._request("POST", "/v1/screenshot", json={"region": region, "session_id": session_id})["artifact"])
+        body = self._request("POST", "/v1/screenshot", json={"region": region, "session_id": session_id})
+        return dict(self._required(body, "artifact"))
 
     def record_start(self, region: dict[str, Any]) -> str:
-        return str(self._request("POST", "/v1/record/start", json={"region": region})["session_id"])
+        body = self._request("POST", "/v1/record/start", json={"region": region})
+        return str(self._required(body, "session_id"))
 
     def record_stop(self, session_id: str) -> dict[str, Any]:
-        return dict(self._request("POST", "/v1/record/stop", json={"session_id": session_id})["recording"])
+        body = self._request("POST", "/v1/record/stop", json={"session_id": session_id})
+        return dict(self._required(body, "recording"))
 
     def capture_diagnostics(self, session_id: str, **options: Any) -> dict[str, Any]:
         return self._request("POST", "/v1/diagnostics", json={"session_id": session_id, **options})
 
     def console_events(self) -> list[dict[str, Any]]:
-        return list(self._request("GET", "/v1/console")["events"])
+        body = self._request("GET", "/v1/console")
+        return list(self._required(body, "events"))
 
     def network_events(self) -> list[dict[str, Any]]:
-        return list(self._request("GET", "/v1/network")["events"])
+        body = self._request("GET", "/v1/network")
+        return list(self._required(body, "events"))
 
     def artifact_bytes(self, artifact: dict[str, Any]) -> bytes:
         path = str(artifact["path"])
