@@ -65,5 +65,6 @@ services:
 
     registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
     assert sorted(registry["services"]) == ["state", "web"]
+    assert registry["profiles"]["dev"] == ["web", "state"]
     assert registry["services"]["web"]["compose_service"] == "web"
     assert registry["services"]["web"]["compose_files"] == [str(compose_path.resolve())]
