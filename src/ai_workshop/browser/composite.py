@@ -27,19 +27,34 @@ class CompositeRenderer:
         if any(array.shape != shape for array in arrays):
             raise ValueError("all selected frames must have the same dimensions")
 
-        background = arrays[-1]
-        output = background.astype(np.float32)
+        stack = np.stack(arrays, axis=0)
+        temporal_background = np.median(stack, axis=0).astype(np.uint8)
+        latest = arrays[-1]
+        output = latest.astype(np.float32)
         count = len(arrays)
 
+        latest_delta = np.max(
+            np.abs(latest.astype(np.int16) - temporal_background.astype(np.int16)),
+            axis=2,
+        )
+        latest_foreground = latest_delta >= 8
+
         for index, array in enumerate(arrays):
-            delta = np.max(np.abs(array.astype(np.int16) - background.astype(np.int16)), axis=2)
+            delta = np.max(
+                np.abs(array.astype(np.int16) - temporal_background.astype(np.int16)),
+                axis=2,
+            )
             mask = delta >= 8
+            if variant == "neutral" and index < count - 1:
+                # Historical frames may add old object positions, but must never
+                # paint "absence" over foreground that exists in the latest frame.
+                mask = mask & ~latest_foreground
             if not np.any(mask):
                 continue
             t = 1.0 if count == 1 else index / (count - 1)
             if variant == "neutral":
                 source = array.astype(np.float32)
-                alpha = 0.35 + 0.65 * t
+                alpha = 1.0 if index == count - 1 else 0.35 + 0.45 * t
             elif variant == "time-gradient":
                 color = np.array([255 * t, 64, 255 * (1.0 - t)], dtype=np.float32)
                 luminance = np.mean(array.astype(np.float32), axis=2, keepdims=True) / 255.0
