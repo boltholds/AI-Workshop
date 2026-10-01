@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 import hmac
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ai_workshop.config import WorkshopConfig
 from ai_workshop.models.process import ExecRequest
