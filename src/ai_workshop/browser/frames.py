@@ -32,6 +32,7 @@ class FrameCandidate:
     change_score: float
     changed_boxes: list[dict[str, int]] = field(default_factory=list)
     selected: bool = False
+    pixel_threshold: int = 0
 
     @property
     def timestamp_ms(self) -> int:
@@ -71,11 +72,17 @@ class AdaptiveFrameSelector:
         reference = frames[0].image
 
         for sample in frames[1:]:
-            score, boxes = self._difference(reference, sample.image, config.sensitivity)
+            score, boxes, pixel_threshold = self._difference(reference, sample.image, config.sensitivity)
             significant = score >= self._MIN_CHANGED_FRACTION[config.sensitivity]
             rate_ok = sample.timestamp_ms - last_selected_ts >= min_interval_ms
             is_selected = significant and rate_ok
-            candidates.append(FrameCandidate(frame=sample, change_score=score, changed_boxes=boxes, selected=is_selected))
+            candidates.append(FrameCandidate(
+                frame=sample,
+                change_score=score,
+                changed_boxes=boxes,
+                selected=is_selected,
+                pixel_threshold=pixel_threshold,
+            ))
             if is_selected:
                 selected.append(sample)
                 last_selected_ts = sample.timestamp_ms
@@ -83,20 +90,26 @@ class AdaptiveFrameSelector:
 
         return SelectionResult(candidates=candidates, selected=selected, config=config)
 
-    def _difference(self, before: np.ndarray, after: np.ndarray, sensitivity: Sensitivity) -> tuple[float, list[dict[str, int]]]:
+    def _difference(self, before: np.ndarray, after: np.ndarray, sensitivity: Sensitivity) -> tuple[float, list[dict[str, int]], int]:
         if before.shape != after.shape:
             raise ValueError("all frames must have the same dimensions")
         delta = cv2.absdiff(before, after)
         magnitude = np.max(delta, axis=2) if delta.ndim == 3 else delta
-        mask = (magnitude >= self._PIXEL_THRESHOLDS[sensitivity]).astype(np.uint8) * 255
+        if sensitivity == "auto":
+            median = float(np.median(magnitude))
+            mad = float(np.median(np.abs(magnitude.astype(np.float32) - median)))
+            pixel_threshold = int(max(8, min(96, round(median + 6.0 * max(mad, 1.0)))))
+        else:
+            pixel_threshold = self._PIXEL_THRESHOLDS[sensitivity]
+        mask = (magnitude >= pixel_threshold).astype(np.uint8) * 255
         changed = int(np.count_nonzero(mask))
         score = changed / float(mask.size)
         if changed == 0:
-            return 0.0, []
+            return 0.0, [], pixel_threshold
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         boxes = []
         for contour in contours:
             x, y, width, height = cv2.boundingRect(contour)
             boxes.append({"x": int(x), "y": int(y), "width": int(width), "height": int(height)})
         boxes.sort(key=lambda b: (b["y"], b["x"]))
-        return score, boxes
+        return score, boxes, pixel_threshold
