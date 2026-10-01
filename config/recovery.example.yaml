@@ -1,0 +1,22 @@
+# AI Workshop core does not require any persistence adapter.
+# Add only the adapters your sandbox needs.
+state_adapters: {}
+
+reset:
+  cache_paths:
+    - .workshop/cache
+  browser_artifact_paths:
+    - .workshop/browser-artifacts
+
+# Optional PostgreSQL reference adapter:
+#
+# state_adapters:
+#   app-db:
+#     kind: postgres
+#     targets:
+#       primary:
+#         host: 127.0.0.1
+#         port: 5432
+#         database: app
+#         user: workshop
+#         password_env: APP_DB_PASSWORD
