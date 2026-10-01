@@ -56,3 +56,19 @@ def test_missing_config_is_clear(tmp_path: Path):
     path = tmp_path / "missing.yaml"
     with pytest.raises(FileNotFoundError, match="missing.yaml"):
         WorkshopConfig.load(path)
+
+
+def test_rejects_duplicate_project_id(tmp_path: Path):
+    path = write_cfg(tmp_path, """
+projects:
+  plc-web:
+    host: /tmp/one
+    container: /workspace/one
+    mode: rw
+  plc-web:
+    host: /tmp/two
+    container: /workspace/two
+    mode: rw
+""")
+    with pytest.raises(ValueError, match="duplicate key: plc-web"):
+        WorkshopConfig.load(path)
