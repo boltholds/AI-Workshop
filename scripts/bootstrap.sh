@@ -90,18 +90,38 @@ fi
 
 gateway_pid_file=".workshop/run/gateway.pid"
 gateway_log=".workshop/logs/gateway.log"
-gateway_running=false
+
 if [[ -f "$gateway_pid_file" ]]; then
   old_pid="$(cat "$gateway_pid_file" 2>/dev/null || true)"
-  if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
-    gateway_running=true
+  if [[ "$old_pid" =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
+    old_command="$(ps -p "$old_pid" -o command= 2>/dev/null || true)"
+    if [[ "$old_command" == *"ai-workshop gateway"* ]]; then
+      kill "$old_pid"
+      for _ in $(seq 1 50); do
+        if ! kill -0 "$old_pid" 2>/dev/null; then
+          break
+        fi
+        sleep 0.1
+      done
+      if kill -0 "$old_pid" 2>/dev/null; then
+        echo "Tracked gateway did not stop cleanly: PID $old_pid" >&2
+        exit 1
+      fi
+    else
+      echo "Ignoring stale gateway PID file; PID $old_pid is not AI Workshop gateway." >&2
+    fi
   fi
+  rm -f "$gateway_pid_file"
 fi
 
-if [[ "$gateway_running" == false ]]; then
-  nohup uv run ai-workshop gateway     --workspace-url http://127.0.0.1:8766     --browser-url http://127.0.0.1:8767     --browser-token "$AI_WORKSHOP_BROWSER_TOKEN"     "${service_registry_args[@]}"     "${recovery_args[@]}"     >"$gateway_log" 2>&1 &
-  echo "$!" > "$gateway_pid_file"
-fi
+nohup uv run ai-workshop gateway \
+  --workspace-url http://127.0.0.1:8766 \
+  --browser-url http://127.0.0.1:8767 \
+  --browser-token "$AI_WORKSHOP_BROWSER_TOKEN" \
+  "${service_registry_args[@]}" \
+  "${recovery_args[@]}" \
+  >"$gateway_log" 2>&1 &
+echo "$!" > "$gateway_pid_file"
 
 for _ in $(seq 1 30); do
   if uv run ai-workshop doctor       --projects config/projects.local.yaml       --workspace-url http://127.0.0.1:8766       --gateway-host 127.0.0.1       --gateway-port 8765       --browser-url http://127.0.0.1:8767 >/dev/null; then
