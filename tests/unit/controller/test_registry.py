@@ -51,3 +51,17 @@ services:
     registry = ServiceRegistry.load(registry_path)
     assert registry.list_ids() == ["web"]
     assert registry.require("web").compose_files == (compose.resolve(),)
+
+
+def test_registry_rejects_option_like_compose_service(tmp_path: Path):
+    compose = tmp_path / "compose.services.yaml"
+    compose.write_text("services: {}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="compose_service"):
+        RegisteredService(
+            service_id="safe-id",
+            compose_project="workshop-dev",
+            working_dir=tmp_path,
+            compose_files=(compose,),
+            compose_service="--project-directory=/",
+            allowed_operations=frozenset({"status"}),
+        )
