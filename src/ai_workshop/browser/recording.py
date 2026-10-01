@@ -45,6 +45,7 @@ class RecordingService:
     def __init__(self, artifact_root: Path):
         self.store = ArtifactStore(artifact_root)
         self._sessions: dict[str, CaptureSession] = {}
+        self._completed: dict[str, RecordingArtifact] = {}
 
     def start(self, runtime, request: RecordingRequest | None = None) -> CaptureSession:
         request = request or RecordingRequest()
@@ -54,11 +55,7 @@ class RecordingService:
         viewport = source_page.viewport_size
         state = runtime.context().storage_state(indexed_db=True)
         browser = runtime.browser_type().launch(headless=runtime.headless, executable_path=runtime.executable_path)
-        context = browser.new_context(
-            storage_state=state,
-            viewport=viewport,
-            record_video_dir=str(self.store.session_dir(session_id)),
-        )
+        context = browser.new_context(storage_state=state, viewport=viewport, record_video_dir=str(self.store.session_dir(session_id)))
         page = context.new_page()
         if source_url and source_url != "about:blank":
             page.goto(source_url, wait_until="domcontentloaded")
@@ -67,15 +64,8 @@ class RecordingService:
             context.close(); browser.close()
             raise RuntimeError("Playwright did not create a video recorder")
         session = CaptureSession(
-            session_id=session_id,
-            page=page,
-            context=context,
-            browser=browser,
-            video=page.video,
-            source_url=source_url,
-            viewport=viewport,
-            region=request.region,
-            resolved_clip=resolved.clip,
+            session_id=session_id, page=page, context=context, browser=browser, video=page.video,
+            source_url=source_url, viewport=viewport, region=request.region, resolved_clip=resolved.clip,
         )
         self._sessions[session_id] = session
         return session
@@ -87,6 +77,9 @@ class RecordingService:
             raise KeyError(f"unknown recording session: {session_id}") from exc
 
     def stop(self, session_id: str) -> RecordingArtifact:
+        completed = self._completed.get(session_id)
+        if completed is not None:
+            return completed
         try:
             session = self._sessions.pop(session_id)
         except KeyError as exc:
@@ -99,14 +92,13 @@ class RecordingService:
                 shutil.move(str(source), destination)
         finally:
             session.browser.close()
-        return RecordingArtifact(
+        artifact = RecordingArtifact(
             session_id=session_id,
             video=ArtifactRef(id=session_id, media_type="video/webm", path=f"{session_id}/recording.webm"),
-            source_url=session.source_url,
-            viewport=session.viewport,
-            region=session.region,
-            resolved_clip=session.resolved_clip,
+            source_url=session.source_url, viewport=session.viewport, region=session.region, resolved_clip=session.resolved_clip,
         )
+        self._completed[session_id] = artifact
+        return artifact
 
 
 def decode_video(path: Path, *, frames_dir: Path | None = None) -> list[FrameSample]:
