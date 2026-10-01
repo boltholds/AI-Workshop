@@ -1,0 +1,29 @@
+name: ai-workshop
+
+services:
+  agent-workspace:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    init: true
+    environment:
+      AI_WORKSHOP_PROJECTS_CONFIG: /config/projects.yaml
+      AI_WORKSHOP_WORKSPACE_HOST: 0.0.0.0
+      AI_WORKSHOP_WORKSPACE_PORT: "8766"
+    volumes:
+      - type: bind
+        source: ${AI_WORKSHOP_PROJECTS_CONFIG:-./config/projects.example.yaml}
+        target: /config/projects.yaml
+        read_only: true
+      - agent-cache:/home/workshop/.cache
+    ports:
+      - "127.0.0.1:8766:8766"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8766/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  agent-cache:
