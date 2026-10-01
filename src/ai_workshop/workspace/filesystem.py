@@ -26,6 +26,7 @@ class FilesystemService:
             raise ValueError("binary or non-UTF-8 file cannot be read as text") from exc
 
     def write(self, project_id: str, path: str, content: str) -> None:
+        self.policy.require_writable(project_id)
         target = self.policy.resolve(project_id, path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
