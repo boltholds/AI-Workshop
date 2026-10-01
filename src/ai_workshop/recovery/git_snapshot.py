@@ -7,6 +7,7 @@ import subprocess
 import tarfile
 from uuid import uuid4
 
+from ai_workshop.recovery.env import safe_subprocess_env
 from ai_workshop.recovery.models import SnapshotManifest
 from ai_workshop.recovery.store import SnapshotStore
 from ai_workshop.workspace.paths import PathPolicy
@@ -18,6 +19,7 @@ def git_bytes(root: Path, *args: str, check: bool = True) -> bytes:
         cwd=root,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=safe_subprocess_env(),
         check=False,
     )
     if check and result.returncode != 0:
@@ -31,6 +33,7 @@ def ensure_git_repository(root: Path) -> None:
         cwd=root,
         capture_output=True,
         text=True,
+        env=safe_subprocess_env(),
         check=False,
     )
     if result.returncode != 0 or result.stdout.strip() != "true":
