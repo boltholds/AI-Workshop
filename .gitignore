@@ -221,3 +221,5 @@ __marimo__/
 .workshop/
 config/projects.local.yaml
 config/services.local.yaml
+.env.local
+config/recovery.local.yaml
