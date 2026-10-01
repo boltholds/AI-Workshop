@@ -67,6 +67,10 @@ def register_browser_tools(server, client: BrowserClient) -> None:
         ]
 
     @server.tool()
+    def browser_network() -> list[dict[str, object]]:
+        return client.network_events()
+
+    @server.tool()
     def browser_record_start(
         mode: Literal["page", "selector", "coordinates"] = "page",
         selector: str | None = None,
