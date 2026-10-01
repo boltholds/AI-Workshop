@@ -24,3 +24,9 @@ def test_compose_requires_workspace_token():
     value = doc["services"]["agent-workspace"]["environment"]["AI_WORKSHOP_WORKSPACE_TOKEN"]
     assert "AI_WORKSHOP_WORKSPACE_TOKEN" in value
     assert ":?" in value
+
+
+def test_agent_image_contains_expected_dev_toolchain():
+    dockerfile = Path("agent/Dockerfile").read_text(encoding="utf-8")
+    for token in ["node:24", "npm", "pnpm", "uv", "poetry", "pytest", "fd-find", "wget"]:
+        assert token in dockerfile
