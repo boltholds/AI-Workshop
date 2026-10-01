@@ -31,6 +31,13 @@ def build_parser() -> argparse.ArgumentParser:
     gateway.add_argument("--workspace-token", default=os.getenv("AI_WORKSHOP_WORKSPACE_TOKEN"))
     gateway.add_argument("--browser-url", default=os.getenv("AI_WORKSHOP_BROWSER_URL"))
     gateway.add_argument("--browser-token", default=os.getenv("AI_WORKSHOP_BROWSER_TOKEN"))
+    gateway.add_argument(
+        "--service-registry",
+        type=Path,
+        default=Path(os.environ["AI_WORKSHOP_SERVICE_REGISTRY"])
+        if os.getenv("AI_WORKSHOP_SERVICE_REGISTRY")
+        else None,
+    )
 
     browser = commands.add_parser("browser")
     browser.add_argument("--profile", type=Path, default=Path("/data/browser-profile"))
@@ -63,6 +70,13 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("AI_WORKSHOP_WORKSPACE_TOKEN or --workspace-token is required")
         if args.browser_url and not args.browser_token:
             raise SystemExit("AI_WORKSHOP_BROWSER_TOKEN or --browser-token is required when browser is configured")
+        service_controller = None
+        if args.service_registry is not None:
+            from ai_workshop.controller.registry import ServiceRegistry
+            from ai_workshop.controller.runner import ComposeController
+
+            service_controller = ComposeController(ServiceRegistry.load(args.service_registry))
+
         run_gateway(
             args.workspace_url,
             token=args.workspace_token,
@@ -70,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             browser_url=args.browser_url,
             browser_token=args.browser_token,
+            service_controller=service_controller,
         )
         return 0
     if args.command == "browser":
