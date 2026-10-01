@@ -4,9 +4,9 @@ state_adapters: {}
 
 reset:
   cache_paths:
-    - .workshop/cache
+    - ../.workshop/cache
   browser_artifact_paths:
-    - .workshop/browser-artifacts
+    - ../.workshop/browser-artifacts
 
 # Optional PostgreSQL reference adapter:
 #
