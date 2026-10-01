@@ -26,3 +26,30 @@ class RestoreResult(BaseModel):
     snapshot_id: str
     project_id: str
     restored: bool = True
+
+
+class ResetPlan(BaseModel):
+    scope: str
+    filesystem_paths: list[str] = Field(default_factory=list)
+    actions: list[str] = Field(default_factory=list)
+    digest: str
+
+
+class ResetResult(BaseModel):
+    scope: str
+    completed: bool = True
+
+
+class StateSnapshotArtifact(BaseModel):
+    snapshot_id: str
+    adapter_id: str
+    target_id: str
+    sha256: str
+    size_bytes: int
+
+
+class StateRestoreResult(BaseModel):
+    snapshot_id: str
+    adapter_id: str
+    target_id: str
+    restored: bool = True
