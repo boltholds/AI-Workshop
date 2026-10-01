@@ -27,8 +27,7 @@ class CompositeRenderer:
         if any(array.shape != shape for array in arrays):
             raise ValueError("all selected frames must have the same dimensions")
 
-        stack = np.stack(arrays, axis=0)
-        background = np.median(stack, axis=0).astype(np.uint8)
+        background = arrays[-1]
         output = background.astype(np.float32)
         count = len(arrays)
 
