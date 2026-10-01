@@ -97,24 +97,26 @@ if (Test-Path "config/recovery.local.yaml") {
 }
 
 $PidPath = ".workshop\run\gateway.pid"
-$GatewayRunning = $false
 if (Test-Path $PidPath) {
     $ExistingPid = Get-Content $PidPath -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($ExistingPid) {
-        $Existing = Get-Process -Id ([int]$ExistingPid) -ErrorAction SilentlyContinue
-        if ($Existing) {
-            $GatewayRunning = $true
+    if ($ExistingPid -and $ExistingPid -match "^[0-9]+$") {
+        $ExistingProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $ExistingPid" -ErrorAction SilentlyContinue
+        if ($ExistingProcess -and $ExistingProcess.CommandLine -match "ai-workshop\s+gateway") {
+            Stop-Process -Id ([int]$ExistingPid) -Force
+            Wait-Process -Id ([int]$ExistingPid) -Timeout 5 -ErrorAction SilentlyContinue
+        }
+        elseif ($ExistingProcess) {
+            Write-Warning "Ignoring stale gateway PID file; PID $ExistingPid is not AI Workshop gateway."
         }
     }
+    Remove-Item $PidPath -Force -ErrorAction SilentlyContinue
 }
 
-if (-not $GatewayRunning) {
-    # Starts: uv run ai-workshop gateway
-    $Stdout = Join-Path $Root ".workshop\logs\gateway.out.log"
-    $Stderr = Join-Path $Root ".workshop\logs\gateway.err.log"
-    $Process = Start-Process -FilePath "uv" -ArgumentList $GatewayArgs -WorkingDirectory $Root -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr -WindowStyle Hidden -PassThru
-    Set-Content -Path $PidPath -Value $Process.Id -Encoding ascii
-}
+# Starts: uv run ai-workshop gateway
+$Stdout = Join-Path $Root ".workshop\logs\gateway.out.log"
+$Stderr = Join-Path $Root ".workshop\logs\gateway.err.log"
+$Process = Start-Process -FilePath "uv" -ArgumentList $GatewayArgs -WorkingDirectory $Root -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr -WindowStyle Hidden -PassThru
+Set-Content -Path $PidPath -Value $Process.Id -Encoding ascii
 
 for ($Attempt = 0; $Attempt -lt 30; $Attempt++) {
     # Health: uv run ai-workshop doctor
