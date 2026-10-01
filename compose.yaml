@@ -5,6 +5,8 @@ services:
       dockerfile: agent/Dockerfile
     user: "10001:10001"
     command: ["workspace", "--projects", "/config/projects.yaml", "--host", "0.0.0.0", "--port", "8766"]
+    environment:
+      AI_WORKSHOP_WORKSPACE_TOKEN: "${AI_WORKSHOP_WORKSPACE_TOKEN:?set AI_WORKSHOP_WORKSPACE_TOKEN}"
     ports:
       - "127.0.0.1:8766:8766"
     volumes:
