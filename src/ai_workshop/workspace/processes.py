@@ -30,10 +30,13 @@ class ProcessService:
         self._terminate_process_group(proc)
         return True
 
-    def exec(self, request: ExecRequest) -> ExecResult:
+    def exec(self, request: ExecRequest, *, allow_read_only: bool = False) -> ExecResult:
+        if not allow_read_only:
+            self.policy.require_writable(request.project_id)
         cwd = self.policy.resolve(request.project_id, request.cwd)
         env = os.environ.copy()
         env.update(request.env)
+        env.pop("AI_WORKSHOP_WORKSPACE_TOKEN", None)
         proc = subprocess.Popen(
             request.argv,
             cwd=cwd,

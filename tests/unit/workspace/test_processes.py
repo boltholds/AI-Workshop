@@ -76,3 +76,22 @@ def test_exec_rejects_cwd_traversal(tmp_path: Path):
         service(tmp_path).exec(
             ExecRequest(project_id="p", cwd="../escape", argv=["python", "-c", "print(1)"])
         )
+
+
+def test_shell_rejects_read_only_project(tmp_path: Path):
+    cfg = WorkshopConfig(projects=[ProjectMount(project_id="p", host=tmp_path, container="/workspace/p", mode="ro")])
+    svc = ProcessService(PathPolicy(cfg, host_paths=True))
+    with pytest.raises(PermissionError, match="read-only"):
+        svc.exec(ExecRequest(project_id="p", argv=["python", "-c", "from pathlib import Path; Path('x.txt').write_text('oops')"]))
+    assert not (tmp_path / "x.txt").exists()
+
+
+def test_shell_does_not_inherit_workspace_control_token(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AI_WORKSHOP_WORKSPACE_TOKEN", "super-secret-control-token")
+    result = service(tmp_path).exec(
+        ExecRequest(
+            project_id="p",
+            argv=["python", "-c", 'import os; print(os.environ.get("AI_WORKSHOP_WORKSPACE_TOKEN", "missing"))'],
+        )
+    )
+    assert result.stdout.strip() == "missing"

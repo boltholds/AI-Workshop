@@ -9,7 +9,7 @@ class GitService:
         self.processes = processes
 
     def status(self, project_id: str) -> GitStatus:
-        result = self.processes.exec(ExecRequest(project_id=project_id, argv=["git", "status", "--porcelain=v1"]))
+        result = self.processes.exec(ExecRequest(project_id=project_id, argv=["git", "status", "--porcelain=v1"]), allow_read_only=True)
         if result.exit_code != 0:
             raise RuntimeError(result.stderr.strip() or "git status failed")
         return GitStatus(porcelain=result.stdout)
@@ -18,7 +18,7 @@ class GitService:
         argv = ["git", "diff"]
         if staged:
             argv.append("--staged")
-        result = self.processes.exec(ExecRequest(project_id=project_id, argv=argv))
+        result = self.processes.exec(ExecRequest(project_id=project_id, argv=argv), allow_read_only=True)
         if result.exit_code != 0:
             raise RuntimeError(result.stderr.strip() or "git diff failed")
         return result.stdout

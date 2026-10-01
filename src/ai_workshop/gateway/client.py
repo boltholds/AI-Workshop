@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from ai_workshop.gateway.errors import sanitize_workspace_error
+from ai_workshop.gateway.errors import GatewayError, sanitize_workspace_error
 
 
 class WorkspaceClient:

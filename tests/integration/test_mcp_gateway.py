@@ -1,4 +1,5 @@
 import httpx
+import pytest
 
 from ai_workshop.gateway.client import WorkspaceClient
 from ai_workshop.gateway.errors import GatewayError, sanitize_workspace_error
@@ -46,3 +47,24 @@ def test_workspace_network_failure_is_sanitized():
         assert "socket" not in exc.message
     else:
         raise AssertionError("expected GatewayError")
+
+
+def test_workspace_client_sanitizes_malformed_success_response():
+    def handler(_request: httpx.Request):
+        return httpx.Response(200, content=b"not-json", headers={"content-type": "application/json"})
+
+    client = WorkspaceClient("http://workspace", token="secret", transport=httpx.MockTransport(handler))
+    with pytest.raises(GatewayError) as exc_info:
+        client.projects()
+    assert exc_info.value.code == "WORKSPACE_PROTOCOL_ERROR"
+    assert "JSON" not in exc_info.value.message
+
+
+def test_workspace_client_sanitizes_missing_response_field():
+    def handler(_request: httpx.Request):
+        return httpx.Response(200, json={"unexpected": []})
+
+    client = WorkspaceClient("http://workspace", token="secret", transport=httpx.MockTransport(handler))
+    with pytest.raises(GatewayError) as exc_info:
+        client.projects()
+    assert exc_info.value.code == "WORKSPACE_PROTOCOL_ERROR"
