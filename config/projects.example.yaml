@@ -1,9 +1,9 @@
 projects:
-  plc-web:
-    host: "C:/Users/example/Code/PLC-Web"
-    container: /workspace/plc-web
+  app:
+    host: "C:/Users/example/Code/My-App"
+    container: /workspace/app
     mode: rw
-  titan:
-    host: "C:/Users/example/Code/Titan"
-    container: /workspace/titan
+  worker:
+    host: "C:/Users/example/Code/My-Worker"
+    container: /workspace/worker
     mode: rw
