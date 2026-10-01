@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 import subprocess
 from typing import Protocol
+
+from ai_workshop.recovery.env import safe_subprocess_env
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +80,7 @@ class PostgresAdapter:
 
     @staticmethod
     def _env(target: PostgresTarget) -> dict[str, str]:
-        env = os.environ.copy()
+        extra: dict[str, str] = {}
         if target.password is not None:
-            env["PGPASSWORD"] = target.password
-        return env
+            extra["PGPASSWORD"] = target.password
+        return safe_subprocess_env(extra)
