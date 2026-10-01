@@ -41,7 +41,7 @@ def controller(tmp_path: Path):
             compose_service="web",
             allowed_operations=frozenset({"status", "logs", "restart", "rebuild", "up"}),
         )
-    ])
+    ], profiles={"dev": frozenset({"web"})})
     executor = CapturingExecutor()
     return ComposeController(registry, executor=executor), executor
 
@@ -58,6 +58,13 @@ def test_mcp_server_registers_service_tools_when_controller_is_configured(tmp_pa
         "services_list", "services_status", "services_logs",
         "services_restart", "services_rebuild", "services_up",
     } <= names
+
+
+def test_service_list_can_filter_by_profile(tmp_path: Path):
+    ctl, _ = controller(tmp_path)
+    server = FakeServer()
+    register_service_tools(server, ctl)
+    assert server.tools["services_list"]("dev") == ["web"]
 
 
 def test_service_tools_do_not_expose_compose_paths_or_cli_fragments(tmp_path: Path):
