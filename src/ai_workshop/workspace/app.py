@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 import hmac
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ai_workshop.config import WorkshopConfig
 from ai_workshop.models.process import ExecRequest
@@ -40,11 +41,39 @@ class CancelRequest(BaseModel):
     run_id: UUID
 
 
-def create_app(config: WorkshopConfig, *, host_paths: bool = False, workspace_token: str) -> FastAPI:
+class SnapshotCreateRequest(BaseModel):
+    project_id: str
+
+
+class RestorePrepareRequest(BaseModel):
+    ttl_seconds: float = Field(default=300.0, gt=0)
+
+
+class RestoreExecuteRequest(BaseModel):
+    confirmation_token: str
+
+
+def create_app(
+    config: WorkshopConfig,
+    *,
+    host_paths: bool = False,
+    workspace_token: str,
+    state_root: Path | None = None,
+) -> FastAPI:
     policy = PathPolicy(config, host_paths=host_paths)
     files = FilesystemService(policy)
     processes = ProcessService(policy)
     git = GitService(processes)
+    snapshots = None
+    restores = None
+    if state_root is not None:
+        from ai_workshop.recovery.git_snapshot import GitSnapshotService
+        from ai_workshop.recovery.restore import RestoreService
+        from ai_workshop.recovery.store import SnapshotStore
+
+        recovery_store = SnapshotStore(Path(state_root) / "snapshots")
+        snapshots = GitSnapshotService(policy, recovery_store)
+        restores = RestoreService(policy, recovery_store)
     if not workspace_token:
         raise ValueError("workspace token must not be empty")
     app = FastAPI(title="AI Workshop Workspace", docs_url=None, redoc_url=None)
@@ -123,5 +152,32 @@ def create_app(config: WorkshopConfig, *, host_paths: bool = False, workspace_to
     @app.get("/v1/git/diff")
     def git_diff(project_id: str, staged: bool = False) -> dict[str, str]:
         return {"diff": git.diff(project_id, staged=staged)}
+
+    if snapshots is not None and restores is not None:
+        @app.post("/v1/recovery/snapshots")
+        def recovery_snapshot_create(request: SnapshotCreateRequest):
+            return {"snapshot": snapshots.create(request.project_id).model_dump()}
+
+        @app.get("/v1/recovery/snapshots/{snapshot_id}/restore-preview")
+        def recovery_restore_preview(snapshot_id: str):
+            return {"preview": restores.preview(snapshot_id).model_dump()}
+
+        @app.post("/v1/recovery/snapshots/{snapshot_id}/restore-prepare")
+        def recovery_restore_prepare(snapshot_id: str, request: RestorePrepareRequest):
+            return {
+                "confirmation": restores.prepare(
+                    snapshot_id,
+                    ttl_seconds=request.ttl_seconds,
+                ).model_dump()
+            }
+
+        @app.post("/v1/recovery/snapshots/{snapshot_id}/restore")
+        def recovery_restore(snapshot_id: str, request: RestoreExecuteRequest):
+            return {
+                "result": restores.restore(
+                    snapshot_id,
+                    request.confirmation_token,
+                ).model_dump()
+            }
 
     return app

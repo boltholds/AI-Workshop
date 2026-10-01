@@ -1,0 +1,1 @@
+"""Optional persistent-state adapters."""

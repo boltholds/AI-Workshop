@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sample v1</title>
+  <style>
+    #stage { width: 420px; height: 120px; position: relative; background: #f2f2f2; }
+    #box { width: 40px; height: 40px; position: absolute; left: 20px; top: 50px; background: rgb(40, 120, 220); transition: transform .6s linear; }
+    #box.moved { transform: translateX(220px); }
+  </style>
+</head>
+<body>
+  <h1>WORKSHOP_SAMPLE</h1>
+  <button id="move" onclick="document.querySelector('#box').classList.add('moved')">Move</button>
+  <div id="stage"><div id="box"></div></div>
+</body>
+</html>

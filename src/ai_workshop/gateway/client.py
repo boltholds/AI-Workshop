@@ -75,3 +75,42 @@ class WorkspaceClient:
     def git_diff(self, project_id: str, *, staged: bool = False) -> str:
         body = self._request("GET", "/v1/git/diff", params={"project_id": project_id, "staged": staged})
         return str(self._required(body, "diff"))
+
+    def snapshot_create(self, project_id: str) -> dict[str, Any]:
+        body = self._request(
+            "POST",
+            "/v1/recovery/snapshots",
+            json={"project_id": project_id},
+        )
+        return dict(self._required(body, "snapshot"))
+
+    def snapshot_preview_restore(self, snapshot_id: str) -> dict[str, Any]:
+        body = self._request(
+            "GET",
+            f"/v1/recovery/snapshots/{snapshot_id}/restore-preview",
+        )
+        return dict(self._required(body, "preview"))
+
+    def snapshot_prepare_restore(
+        self,
+        snapshot_id: str,
+        ttl_seconds: float = 300.0,
+    ) -> dict[str, Any]:
+        body = self._request(
+            "POST",
+            f"/v1/recovery/snapshots/{snapshot_id}/restore-prepare",
+            json={"ttl_seconds": ttl_seconds},
+        )
+        return dict(self._required(body, "confirmation"))
+
+    def snapshot_restore(
+        self,
+        snapshot_id: str,
+        confirmation_token: str,
+    ) -> dict[str, Any]:
+        body = self._request(
+            "POST",
+            f"/v1/recovery/snapshots/{snapshot_id}/restore",
+            json={"confirmation_token": confirmation_token},
+        )
+        return dict(self._required(body, "result"))
