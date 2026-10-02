@@ -116,6 +116,24 @@ class PrincipalStore:
                     self._global_roles.pop(principal_id, None)
                 raise
 
+    def revoke_global_role(self, principal_id: str, role_id: str) -> None:
+        with self._lock:
+            self.get(principal_id)
+            self.get_role(role_id)
+            roles = self._global_roles.get(principal_id)
+            if roles is None or role_id not in roles:
+                return
+            roles.remove(role_id)
+            if not roles:
+                self._global_roles.pop(principal_id, None)
+            try:
+                self._persist()
+            except Exception:
+                restored = self._global_roles.setdefault(principal_id, [])
+                if role_id not in restored:
+                    restored.append(role_id)
+                raise
+
     def global_roles(self, principal_id: str) -> tuple[str, ...]:
         with self._lock:
             self.get(principal_id)
