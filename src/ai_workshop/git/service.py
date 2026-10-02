@@ -74,7 +74,7 @@ class GitRepositoryService:
             ["symbolic-ref", "--quiet", "--short", "HEAD"],
             check=False,
         )
-        if branch_result.exit_code == 0:
+        if branch_result.returncode == 0:
             branch = branch_result.stdout.strip()
         else:
             commit = self._run(project.path, ["rev-parse", "--short", "HEAD"])
