@@ -320,7 +320,8 @@ jobs:
           consumers = set()
           for name, service in compose["services"].items():
               for volume in service.get("volumes", []):
-                  if "server-runtime-socket" in str(volume):
+                  if "docker.sock" in str(volume):
                       consumers.add(name)
-          assert consumers == {"rootless-runtime", "server-control"}, consumers
+          assert consumers == {"server-control"}, consumers
+          assert "rootless-runtime" not in compose["services"]
           PY

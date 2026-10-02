@@ -91,7 +91,8 @@ def test_server_control_image_installs_git_and_ssh_client():
 def test_final_server_deployment_contains_required_outer_services():
     compose = load_yaml("deploy/server/compose.yaml")
     services = compose["services"]
-    assert {"rootless-runtime", "server-control", "browser", "ingress"} <= set(services)
+    assert {"server-control", "browser", "ingress"} <= set(services)
+    assert "rootless-runtime" not in services
 
 
 def test_final_server_deployment_never_mounts_host_docker_socket():
@@ -106,35 +107,50 @@ def test_final_server_deployment_only_ingress_publishes_host_port():
     assert published == {"ingress"}
 
 
-def test_final_server_deployment_runtime_socket_is_control_plane_only():
+def test_final_server_deployment_runtime_socket_is_host_bind_and_control_plane_only():
     compose = load_yaml("deploy/server/compose.yaml")
-    consumers = set()
+    consumers = []
     for name, service in compose["services"].items():
         for volume in service.get("volumes", []):
-            if "server-runtime-socket" in str(volume):
-                consumers.add(name)
-    assert consumers == {"rootless-runtime", "server-control"}
+            serialized = str(volume)
+            if "docker.sock" in serialized:
+                consumers.append((name, serialized))
+    assert len(consumers) == 1
+    name, mount = consumers[0]
+    assert name == "server-control"
+    assert "AI_WORKSHOP_RUNTIME_SOCKET" in mount
+    assert "/run/ai-workshop-runtime/1000/docker.sock" in mount
+    assert "/var/run/docker.sock" not in mount
 
 
 def test_final_server_deployment_persists_required_domains():
     compose = load_yaml("deploy/server/compose.yaml")
     volumes = set(compose["volumes"])
     assert {
-        "server-runtime-data",
-        "server-storage",
         "server-state",
         "server-ca",
         "browser-profile",
         "browser-artifacts",
     } <= volumes
+    assert "server-runtime-data" not in volumes
+    assert "server-storage" not in volumes
+
+    control_mounts = [
+        str(item)
+        for item in compose["services"]["server-control"]["volumes"]
+    ]
+    assert any("AI_WORKSHOP_STORAGE_ROOT" in item for item in control_mounts)
 
 
-def test_final_server_runtime_has_no_tcp_daemon_listener():
+
+
+def test_final_server_config_uses_host_runtime_endpoint():
+    config = load_yaml("deploy/server/config/server.yaml")
+    assert config["storage_root"] == "/var/lib/ai-workshop/storage"
+    assert config["private_endpoint_host"] == "host.docker.internal"
+
+
+def test_final_server_control_maps_host_gateway():
     compose = load_yaml("deploy/server/compose.yaml")
-    runtime = compose["services"]["rootless-runtime"]
-    command = runtime.get("command") or []
-    serialized = " ".join(command)
-    assert command[0] == "dockerd"
-    assert "unix:///run/user/1000/docker.sock" in serialized
-    assert "2375" not in serialized
-    assert "tcp://" not in serialized
+    extra_hosts = compose["services"]["server-control"]["extra_hosts"]
+    assert "host.docker.internal:host-gateway" in extra_hosts
