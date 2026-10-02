@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from ipaddress import IPv4Address
 from pathlib import Path, PurePosixPath
 from typing import Annotated
 
@@ -128,6 +127,9 @@ class RuntimeWorkloadStatus(StrictFrozenModel):
 
 class RuntimeEndpoint(StrictFrozenModel):
     workload_id: str = Field(min_length=1, pattern=_IDENTIFIER_PATTERN)
-    host: IPv4Address
+    host: str = Field(
+        min_length=1,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9.-]*$",
+    )
     host_port: int = Field(ge=1, le=65535)
     container_port: int = Field(ge=1, le=65535)
