@@ -46,3 +46,21 @@ def test_cli_exposes_service_profile_rendering():
     ])
     assert args.command == "services"
     assert args.services_command == "render"
+
+
+def test_cli_exposes_server_serve_and_doctor_commands():
+    parser = build_parser()
+
+    serve = parser.parse_args([
+        "server", "serve",
+        "--config", "config/server.yaml",
+    ])
+    assert serve.command == "server"
+    assert serve.server_command == "serve"
+
+    doctor = parser.parse_args([
+        "server", "doctor",
+        "--config", "config/server.yaml",
+    ])
+    assert doctor.command == "server"
+    assert doctor.server_command == "doctor"
