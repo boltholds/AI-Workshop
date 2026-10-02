@@ -26,6 +26,7 @@ class NetworkGrant(BaseModel):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$",
     )
     purpose: NetworkGrantPurpose
+    internal: bool
 
 
 class RuntimeNetworkPolicyProtocol(Protocol):
@@ -59,6 +60,7 @@ class RuntimeNetworkPolicy:
             NetworkGrant(
                 network_name=_PRIVATE_NETWORKS[workload.kind],
                 purpose=NetworkGrantPurpose.PRIVATE,
+                internal=True,
             )
         ]
         if workload.outbound is RuntimeOutboundAccess.INTERNET:
@@ -70,6 +72,7 @@ class RuntimeNetworkPolicy:
                 NetworkGrant(
                     network_name="ai-workshop-egress",
                     purpose=NetworkGrantPurpose.EGRESS,
+                    internal=False,
                 )
             )
         return tuple(grants)
