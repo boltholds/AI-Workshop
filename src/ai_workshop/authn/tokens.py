@@ -201,6 +201,10 @@ class WorkshopTokenAuthenticator:
         try:
             return self.sessions.authenticate(token)
         except PermissionError:
+            if required_scope is None:
+                raise PermissionError(
+                    "interactive session required"
+                ) from None
             return self.service_tokens.authenticate(
                 token,
                 required_scope=required_scope,
