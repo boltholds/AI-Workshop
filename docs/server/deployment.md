@@ -823,3 +823,95 @@ chown -R ai-workshop-runtime:ai-workshop-runtime /var/lib/ai-workshop/storage
 ```
 
 The rootless runtime publishes controller-issued private endpoint ports from `41000` through `41999` on the host. Restrict that range at the host firewall to trusted local/container traffic; do not expose it to the public Internet.
+
+
+## Migrating from containerized DIND runtime
+
+Installations created with the earlier production Compose used a `rootless-runtime` DIND service plus the `server-storage` named volume. Migrate that storage before starting the host-managed runtime deployment.
+
+Stop the old outer deployment without deleting volumes:
+
+```bash
+cd /opt/ai-workshop
+docker-compose -f deploy/server/compose.yaml down
+```
+
+Find the old storage volume:
+
+```bash
+docker volume ls --format '{{.Name}}' | grep 'server-storage'
+```
+
+For the default Compose project name it is normally `server_server-storage`. Create the new host storage and copy the old volume:
+
+```bash
+mkdir -p /var/lib/ai-workshop/storage
+
+docker run --rm \
+  -v server_server-storage:/from:ro \
+  -v /var/lib/ai-workshop/storage:/to \
+  alpine:latest \
+  sh -c 'cp -a /from/. /to/'
+```
+
+Do not delete the old named volume yet. Keep it as rollback material until the new runtime has passed doctor and workload tests.
+
+Give the dedicated rootless runtime user access to the workload storage:
+
+```bash
+chown -R ai-workshop-runtime:ai-workshop-runtime \
+  /var/lib/ai-workshop/storage
+chmod 700 /var/lib/ai-workshop/storage
+```
+
+Update `deploy/server/.env`:
+
+```env
+AI_WORKSHOP_RUNTIME_SOCKET=/run/user/1000/docker.sock
+AI_WORKSHOP_STORAGE_ROOT=/var/lib/ai-workshop/storage
+```
+
+Then recreate the outer deployment from the new manifest:
+
+```bash
+docker-compose -f deploy/server/compose.yaml up -d --build
+```
+
+The production Compose no longer starts a `rootless-runtime` container. `server-control` receives only the dedicated host-managed rootless socket.
+
+Verify the control plane:
+
+```bash
+docker-compose -f deploy/server/compose.yaml exec -T server-control \
+  ai-workshop server doctor \
+    --config /config/server.yaml \
+    --state-root /state
+```
+
+Verify the socket visible inside the control plane belongs to the rootless runtime:
+
+```bash
+docker-compose -f deploy/server/compose.yaml exec -T server-control \
+  docker --host unix:///run/ai-workshop-runtime/1000/docker.sock info
+```
+
+Finally verify controller endpoint reachability from the outer control plane:
+
+```bash
+docker-compose -f deploy/server/compose.yaml exec -T server-control \
+  docker --host unix:///run/ai-workshop-runtime/1000/docker.sock \
+  run -d --rm --name ai-workshop-endpoint-smoke \
+  -p 41000:8080 alpine:latest \
+  sh -c 'mkdir -p /www; echo ENDPOINT_OK >/www/index.html; httpd -f -p 8080 -h /www'
+
+docker-compose -f deploy/server/compose.yaml exec -T server-control \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://host.docker.internal:41000', timeout=5).read().decode().strip())"
+
+docker-compose -f deploy/server/compose.yaml exec -T server-control \
+  docker --host unix:///run/ai-workshop-runtime/1000/docker.sock \
+  rm -f ai-workshop-endpoint-smoke
+```
+
+The expected HTTP result is `ENDPOINT_OK`.
+
+Rootless-published private endpoint ports `41000-41999` are host listeners used by the control plane through `host.docker.internal`. Restrict this range with the host firewall so it is not reachable from public interfaces.
