@@ -5,6 +5,7 @@ import inspect
 import pytest
 
 from ai_workshop.server.models import (
+    RuntimeEndpoint,
     RuntimeEnvironmentVariable,
     RuntimeWorkloadSpec,
     RuntimeWorkloadState,
@@ -15,6 +16,25 @@ from ai_workshop.server.rootless import (
     RootlessDockerController,
     RuntimeCommandResult,
 )
+
+
+class NoEndpointRegistry:
+    def __init__(self):
+        self.released: list[str] = []
+
+    def allocate(self, workload_id: str, container_port: int) -> RuntimeEndpoint:
+        return RuntimeEndpoint(
+            workload_id=workload_id,
+            host="rootless-runtime",
+            host_port=41000 + container_port % 100,
+            container_port=container_port,
+        )
+
+    def require(self, workload_id: str, container_port: int) -> RuntimeEndpoint:
+        return self.allocate(workload_id, container_port)
+
+    def release(self, workload_id: str) -> None:
+        self.released.append(workload_id)
 
 
 class AllowNetworkPolicy:
@@ -47,6 +67,7 @@ def controller():
     return RootlessDockerController(
         policy=AllowPolicy(),
         network_policy=AllowNetworkPolicy(),
+        endpoint_registry=NoEndpointRegistry(),
         executor=executor,
     ), executor
 
@@ -150,6 +171,7 @@ def test_create_validates_policy_before_runtime_execution():
     ctl = RootlessDockerController(
         policy=RejectPolicy(),
         network_policy=AllowNetworkPolicy(),
+        endpoint_registry=NoEndpointRegistry(),
         executor=executor,
     )
 
@@ -179,6 +201,7 @@ def test_create_consumes_network_grants_from_policy():
     ctl = RootlessDockerController(
         policy=AllowPolicy(),
         network_policy=PrivateNetworkPolicy(),
+        endpoint_registry=NoEndpointRegistry(),
         executor=executor,
     )
 
@@ -191,3 +214,41 @@ def test_create_consumes_network_grants_from_policy():
 
     argv, _ = executor.calls[-1]
     assert argv[argv.index("--network") + 1] == "ai-workshop-agent-runs"
+
+
+def test_create_allocates_private_endpoint_for_declared_container_port():
+    executor = CapturingExecutor()
+    endpoints = NoEndpointRegistry()
+    ctl = RootlessDockerController(
+        policy=AllowPolicy(),
+        network_policy=AllowNetworkPolicy(),
+        endpoint_registry=endpoints,
+        executor=executor,
+    )
+
+    ctl.create(
+        RuntimeWorkloadSpec(
+            workload_id="service-1",
+            image="nginx:latest",
+            container_ports=(8080,),
+        )
+    )
+
+    argv, _ = executor.calls[-1]
+    assert argv[argv.index("--publish") + 1] == "41080:8080"
+    assert ctl.publish_private_endpoint("service-1", 8080).host == "rootless-runtime"
+
+
+def test_remove_releases_private_endpoints():
+    executor = CapturingExecutor()
+    endpoints = NoEndpointRegistry()
+    ctl = RootlessDockerController(
+        policy=AllowPolicy(),
+        network_policy=AllowNetworkPolicy(),
+        endpoint_registry=endpoints,
+        executor=executor,
+    )
+
+    ctl.remove("service-1")
+
+    assert endpoints.released == ["service-1"]
