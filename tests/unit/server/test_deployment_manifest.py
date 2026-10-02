@@ -68,3 +68,12 @@ def test_desktop_compose_does_not_include_server_runtime():
     assert "server-control" not in compose["services"]
     assert "rootless-runtime" not in compose["services"]
     assert "server-runtime-socket" not in (compose.get("volumes") or {})
+
+
+def test_server_runtime_uses_pinned_rootless_dind_image():
+    compose = load_yaml(ROOT / "compose.server.yaml")
+    runtime = compose["services"]["rootless-runtime"]
+    image = runtime["image"]
+
+    assert "dind-rootless@sha256:" in image
+    assert image.startswith("docker:29.8.1-dind-rootless@sha256:")
