@@ -102,6 +102,7 @@ class RuntimeWorkloadSpec(StrictFrozenModel):
     workload_id: str = Field(min_length=1, pattern=_IDENTIFIER_PATTERN)
     image: str = Field(min_length=1)
     command: tuple[str, ...] = ()
+    entrypoint: str | None = None
     environment: tuple[RuntimeEnvironmentVariable, ...] = ()
     kind: RuntimeWorkloadKind = RuntimeWorkloadKind.AGENT_RUN
     outbound: RuntimeOutboundAccess = RuntimeOutboundAccess.NONE
@@ -111,12 +112,16 @@ class RuntimeWorkloadSpec(StrictFrozenModel):
     network_namespace: RuntimeNetworkNamespace = RuntimeNetworkNamespace.ISOLATED
     devices: tuple[RuntimeDeviceMapping, ...] = ()
     container_ports: tuple[RuntimePort, ...] = ()
+    cpu_limit: float | None = Field(default=None, gt=0, le=64)
+    memory_limit_mb: int | None = Field(default=None, ge=128, le=262144)
 
-    @field_validator("image")
+    @field_validator("image", "entrypoint")
     @classmethod
-    def image_must_not_be_cli_fragment(cls, value: str) -> str:
+    def image_must_not_be_cli_fragment(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
         if value.startswith("-") or any(char.isspace() for char in value):
-            raise ValueError("image must be a container image reference")
+            raise ValueError("image/entrypoint must not be a CLI fragment")
         return value
 
 

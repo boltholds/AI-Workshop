@@ -71,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(os.getenv("AI_WORKSHOP_PROJECTS", "config/projects.local.yaml")),
     )
 
+    commands.add_parser("run-host")
+
     server = commands.add_parser("server")
     server_commands = server.add_subparsers(dest="server_command", required=True)
 
@@ -192,6 +194,12 @@ def main(argv: list[str] | None = None) -> int:
             reset_service=reset_service,
         )
         return 0
+    if args.command == "run-host":
+        import threading
+
+        threading.Event().wait()
+        return 0
+
     if args.command == "server":
         import json
         from dataclasses import asdict

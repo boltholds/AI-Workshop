@@ -16,6 +16,10 @@ def build_server(
     project_service=None,
     git_service=None,
     git_destructive_service=None,
+    agent_service=None,
+    run_service=None,
+    authorization_service=None,
+    principal_resolver=None,
 ):
     from mcp.server.mcpserver import MCPServer
 
@@ -84,6 +88,33 @@ def build_server(
 
         register_project_tools(server, project_service)
 
+    if agent_service is not None or run_service is not None:
+        if authorization_service is None or principal_resolver is None:
+            raise ValueError(
+                "authorization service and principal resolver are required "
+                "for agent/run tools"
+            )
+
+    if agent_service is not None:
+        from ai_workshop.gateway.agent_tools import register_agent_tools
+
+        register_agent_tools(
+            server,
+            agent_service,
+            authorization_service,
+            principal_resolver,
+        )
+
+    if run_service is not None:
+        from ai_workshop.gateway.run_tools import register_run_tools
+
+        register_run_tools(
+            server,
+            run_service,
+            authorization_service,
+            principal_resolver,
+        )
+
     from ai_workshop.gateway.recovery_tools import register_recovery_tools
     register_recovery_tools(
         server,
@@ -122,6 +153,10 @@ def run_gateway(
     project_service=None,
     git_service=None,
     git_destructive_service=None,
+    agent_service=None,
+    run_service=None,
+    authorization_service=None,
+    principal_resolver=None,
 ) -> None:
     server = build_server(
         workspace_url,
@@ -134,6 +169,10 @@ def run_gateway(
         project_service=project_service,
         git_service=git_service,
         git_destructive_service=git_destructive_service,
+        agent_service=agent_service,
+        run_service=run_service,
+        authorization_service=authorization_service,
+        principal_resolver=principal_resolver,
     )
     server.run(
         transport="streamable-http",
