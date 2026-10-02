@@ -262,6 +262,8 @@ jobs:
             exit 1
           fi
           cat /tmp/server-doctor.json
+          docker compose -f compose.server.yaml exec -T server-control git --version
+          docker compose -f compose.server.yaml exec -T server-control ssh -V
       - name: Create nested workload and persistent state
         run: |
           docker compose -f compose.server.yaml exec -T server-control \

@@ -78,3 +78,11 @@ def test_server_runtime_uses_pinned_rootless_dind_image():
 
     assert "dind-rootless@sha256:" in image
     assert image.startswith("docker:29.8.1-dind-rootless@sha256:")
+
+
+def test_server_control_image_installs_git_and_ssh_client():
+    dockerfile = (ROOT / "server" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "apt-get install" in dockerfile
+    assert "git" in dockerfile
+    assert "openssh-client" in dockerfile
