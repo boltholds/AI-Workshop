@@ -96,32 +96,32 @@ class RootlessDockerController:
         network_grants = self.network_policy.allowed_networks(spec)
         for grant in network_grants:
             self._ensure_network(grant)
-        endpoints = [
-            self.endpoint_registry.allocate(spec.workload_id, port)
-            for port in spec.container_ports
-        ]
-        argv = self._base() + ["create", "--name", spec.workload_id]
-        if network_grants:
-            argv.extend(["--network", network_grants[0].network_name])
-        for endpoint in endpoints:
-            argv.extend(
-                [
-                    "--publish",
-                    f"{endpoint.host_port}:{endpoint.container_port}",
-                ]
-            )
-        for mount in spec.mounts:
-            mount_value = (
-                f"type=bind,src={mount.source},dst={mount.target}"
-                + (",readonly" if mount.read_only else "")
-            )
-            argv.extend(["--mount", mount_value])
-        for variable in spec.environment:
-            argv.extend(["--env", f"{variable.name}={variable.value}"])
-        argv.extend(["--", spec.image, *spec.command])
-
         created = False
         try:
+            endpoints = [
+                self.endpoint_registry.allocate(spec.workload_id, port)
+                for port in spec.container_ports
+            ]
+            argv = self._base() + ["create", "--name", spec.workload_id]
+            if network_grants:
+                argv.extend(["--network", network_grants[0].network_name])
+            for endpoint in endpoints:
+                argv.extend(
+                    [
+                        "--publish",
+                        f"{endpoint.host_port}:{endpoint.container_port}",
+                    ]
+                )
+            for mount in spec.mounts:
+                mount_value = (
+                    f"type=bind,src={mount.source},dst={mount.target}"
+                    + (",readonly" if mount.read_only else "")
+                )
+                argv.extend(["--mount", mount_value])
+            for variable in spec.environment:
+                argv.extend(["--env", f"{variable.name}={variable.value}"])
+            argv.extend(["--", spec.image, *spec.command])
+
             self._execute(argv)
             created = True
             for grant in network_grants[1:]:
