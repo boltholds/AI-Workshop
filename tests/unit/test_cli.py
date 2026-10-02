@@ -64,3 +64,11 @@ def test_cli_exposes_server_serve_and_doctor_commands():
     ])
     assert doctor.command == "server"
     assert doctor.server_command == "doctor"
+
+
+def test_cli_accepts_run_host_command():
+    from ai_workshop.cli import build_parser
+
+    args = build_parser().parse_args(["run-host"])
+
+    assert args.command == "run-host"
