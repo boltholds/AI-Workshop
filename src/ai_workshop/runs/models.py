@@ -29,6 +29,7 @@ class AgentRun(_FrozenModel):
     run_id: str = Field(min_length=1, pattern=_ID_PATTERN)
     agent_id: str = Field(min_length=1, pattern=_ID_PATTERN)
     principal_id: str = Field(min_length=1, pattern=_ID_PATTERN)
+    initiator_principal_id: str = Field(min_length=1, pattern=_ID_PATTERN)
     project_id: str = Field(min_length=1, pattern=_ID_PATTERN)
     base_ref: str = Field(min_length=1, max_length=500)
     writable: bool
