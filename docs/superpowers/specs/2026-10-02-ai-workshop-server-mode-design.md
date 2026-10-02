@@ -1,7 +1,7 @@
 # AI Workshop Server Mode — Architecture Design
 
 Date: 2026-10-02  
-Status: Approved conversational design; written specification pending final review
+Status: Approved
 
 ## 1. Purpose
 
