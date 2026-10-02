@@ -1,0 +1,14 @@
+profile:
+  profile_id: forge-internal
+  provider: forgejo
+  base_url: http://forgejo:3000
+  credential_id: forgejo-api
+  transport_security: internal-http
+
+ingress:
+  enabled: false
+  hostname: forge.local
+
+lifecycle:
+  compose_file: infrastructure/forgejo/compose.yaml
+  preserve_data_on_disable: true
