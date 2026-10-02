@@ -134,3 +134,64 @@ The tunnel client also exposes local health/readiness/admin surfaces. Keep those
 Secure MCP Tunnel is outbound-only from the machine running AI Workshop. The Workshop MCP port remains bound to loopback and does not require an inbound firewall rule or a public reverse proxy.
 
 Only connect AI Workshop to OpenAI workspaces and Platform organizations you control and trust. AI Workshop has intentionally powerful development tools; ChatGPT may ask for confirmation before write/modify actions depending on app permissions and action context.
+
+
+## Server Mode (recommended for a dedicated host)
+
+Server Mode exposes a private MCP gateway on host loopback:
+
+~~~text
+http://127.0.0.1:8765/mcp
+~~~
+
+The production Compose service is named `gateway`. It uses the canonical Server Mode project registry, credential store, and Git services from the same persistent `/state` and `/var/lib/ai-workshop/storage` domains as the rest of Server Mode.
+
+Start or recreate it:
+
+~~~bash
+cd /opt/ai-workshop
+docker-compose -f deploy/server/compose.yaml up -d --build gateway
+docker-compose -f deploy/server/compose.yaml ps gateway
+~~~
+
+Verify the local listener:
+
+~~~bash
+curl -i http://127.0.0.1:8765/mcp
+~~~
+
+A plain GET may return a method/protocol response rather than an MCP session; the important deployment check is that the loopback listener is reachable. For protocol validation, use MCP Inspector or the Secure MCP Tunnel doctor.
+
+The Server Mode gateway intentionally does not mount the rootless Docker socket. Runtime/container control remains behind the Server Mode control boundary.
+
+### Create the Secure MCP Tunnel
+
+Create a tunnel in OpenAI Platform tunnel settings and associate it with the ChatGPT workspace that will use AI Workshop.
+
+On the AI Workshop host:
+
+~~~bash
+export CONTROL_PLANE_API_KEY="..."
+export AI_WORKSHOP_TUNNEL_ID="tunnel_..."
+
+tunnel-client init   --profile ai-workshop-server   --tunnel-id "$AI_WORKSHOP_TUNNEL_ID"   --mcp-server-url http://127.0.0.1:8765/mcp
+
+tunnel-client doctor   --profile ai-workshop-server   --explain
+
+tunnel-client run   --profile ai-workshop-server
+~~~
+
+Keep `tunnel-client run` healthy while ChatGPT is using the app. The tunnel is outbound-only; do not publish port 8765 to the LAN or Internet.
+
+### Add the Server Mode app in ChatGPT
+
+1. Enable Developer mode for the target ChatGPT workspace/account.
+2. Open ChatGPT Plugins and choose the plus button to create a developer-mode app.
+3. Choose **Tunnel** as the connection type.
+4. Select the tunnel associated with the workspace, or provide `AI_WORKSHOP_TUNNEL_ID` if the UI asks for it.
+5. Name the app `AI Workshop`.
+6. Review the discovered MCP tools before saving the connection.
+
+The initial Server Mode gateway exposes server-native project and Git operations, including confirmation-gated destructive Git actions. Desktop-only workspace filesystem/shell tools are not exposed by this Server Mode composition.
+
+As more Server Mode AgentRun and dynamic MCP services are composed into the same gateway, the app endpoint and tunnel stay unchanged; only the discovered tool catalog expands.

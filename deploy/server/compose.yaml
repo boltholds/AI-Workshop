@@ -29,6 +29,35 @@ services:
     restart: unless-stopped
     networks: [server-control]
 
+  gateway:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    command:
+      - server
+      - gateway
+      - --config
+      - /config/server.yaml
+      - --state-root
+      - /state
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8765"
+    volumes:
+      - ./config/server.yaml:/config/server.yaml:ro
+      - ${AI_WORKSHOP_STORAGE_ROOT:-/var/lib/ai-workshop/storage}:/var/lib/ai-workshop/storage
+      - server-state:/state
+    ports:
+      - "127.0.0.1:${AI_WORKSHOP_MCP_PORT:-8765}:8765"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',8765),2); s.close()"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [server-control]
+
   browser:
     build:
       context: ../..
