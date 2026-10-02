@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import subprocess
 from typing import Protocol
 
+from ai_workshop.server.endpoints import RuntimeEndpointRegistry
 from ai_workshop.server.models import (
     RuntimeEndpoint,
     RuntimeWorkloadSpec,
@@ -73,29 +74,57 @@ class RootlessDockerController:
         *,
         policy: RuntimeWorkloadPolicy,
         network_policy: RuntimeNetworkPolicyProtocol,
+        endpoint_registry: RuntimeEndpointRegistry,
         executor: RuntimeExecutor | None = None,
         timeout_seconds: float = 60.0,
     ):
         self.policy = policy
         self.network_policy = network_policy
+        self.endpoint_registry = endpoint_registry
         self.executor = executor or SubprocessRuntimeExecutor()
         self.timeout_seconds = timeout_seconds
 
     def create(self, spec: RuntimeWorkloadSpec) -> RuntimeWorkloadStatus:
         self.policy.validate(spec)
         network_grants = self.network_policy.allowed_networks(spec)
+        endpoints = [
+            self.endpoint_registry.allocate(spec.workload_id, port)
+            for port in spec.container_ports
+        ]
         argv = self._base() + ["create", "--name", spec.workload_id]
         if network_grants:
             argv.extend(["--network", network_grants[0].network_name])
+        for endpoint in endpoints:
+            argv.extend(
+                [
+                    "--publish",
+                    f"{endpoint.host_port}:{endpoint.container_port}",
+                ]
+            )
         for variable in spec.environment:
             argv.extend(["--env", f"{variable.name}={variable.value}"])
         argv.extend(["--", spec.image, *spec.command])
-        self._execute(argv)
-        for grant in network_grants[1:]:
-            self._execute(
-                self._base()
-                + ["network", "connect", grant.network_name, spec.workload_id]
-            )
+
+        created = False
+        try:
+            self._execute(argv)
+            created = True
+            for grant in network_grants[1:]:
+                self._execute(
+                    self._base()
+                    + ["network", "connect", grant.network_name, spec.workload_id]
+                )
+        except Exception:
+            if created:
+                try:
+                    self._execute(
+                        self._base() + ["rm", "--force", "--", spec.workload_id]
+                    )
+                except Exception:
+                    pass
+            self.endpoint_registry.release(spec.workload_id)
+            raise
+
         return RuntimeWorkloadStatus(
             workload_id=spec.workload_id,
             state=RuntimeWorkloadState.CREATED,
@@ -120,6 +149,7 @@ class RootlessDockerController:
     def remove(self, workload_id: str) -> None:
         self._validated_id(workload_id)
         self._execute(self._base() + ["rm", "--", workload_id])
+        self.endpoint_registry.release(workload_id)
 
     def status(self, workload_id: str) -> RuntimeWorkloadStatus:
         self._validated_id(workload_id)
@@ -154,10 +184,8 @@ class RootlessDockerController:
         workload_id: str,
         container_port: int,
     ) -> RuntimeEndpoint:
-        raise RuntimeControllerError(
-            "ENDPOINT_REGISTRY_UNAVAILABLE",
-            "Private endpoint registry is not configured",
-        )
+        self._validated_id(workload_id)
+        return self.endpoint_registry.require(workload_id, container_port)
 
     def _execute(self, argv: list[str]) -> RuntimeCommandResult:
         result = self.executor.run(argv, timeout_seconds=self.timeout_seconds)
