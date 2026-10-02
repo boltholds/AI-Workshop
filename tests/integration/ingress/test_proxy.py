@@ -171,15 +171,16 @@ def test_authenticated_route_rejects_missing_bearer_token(monkeypatch):
     from ai_workshop.ingress.models import IngressAuthPolicy
 
     adapter = ProxyAdapter(
+        allowed_target_hosts=frozenset({"127.0.0.1"}),
         authenticator=FakeIngressAuthenticator(),
     )
-    route = route("protected", "workshop.local", 41010).model_copy(
+    protected_route = route("protected", "workshop.local", 41010).model_copy(
         update={
             "auth_policy": IngressAuthPolicy.AUTHENTICATED,
             "required_scope": "mcp.call",
         }
     )
-    adapter.apply([route], {})
+    adapter.apply([protected_route], {})
 
     response = TestClient(adapter.app).get(
         "/mcp",
@@ -203,14 +204,17 @@ def test_authenticated_route_forwards_verified_principal_and_strips_spoofed_head
 
     monkeypatch.setattr(httpx.AsyncClient, "request", fake_request)
     authenticator = FakeIngressAuthenticator()
-    adapter = ProxyAdapter(authenticator=authenticator)
-    route = route("protected", "workshop.local", 41010).model_copy(
+    adapter = ProxyAdapter(
+        allowed_target_hosts=frozenset({"127.0.0.1"}),
+        authenticator=authenticator,
+    )
+    protected_route = route("protected", "workshop.local", 41010).model_copy(
         update={
             "auth_policy": IngressAuthPolicy.AUTHENTICATED,
             "required_scope": "mcp.call",
         }
     )
-    adapter.apply([route], {})
+    adapter.apply([protected_route], {})
 
     response = TestClient(adapter.app).get(
         "/mcp",
@@ -234,7 +238,9 @@ def test_public_route_does_not_require_authenticator(monkeypatch):
         return httpx.Response(200, content=b"ok")
 
     monkeypatch.setattr(httpx.AsyncClient, "request", fake_request)
-    adapter = ProxyAdapter()
+    adapter = ProxyAdapter(
+        allowed_target_hosts=frozenset({"127.0.0.1"}),
+    )
     adapter.apply([route("public", "app.workshop.local", 41011)], {})
 
     response = TestClient(adapter.app).get(
