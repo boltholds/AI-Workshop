@@ -375,7 +375,7 @@ def test_run_start_audit_failure_rolls_back_persisted_run(tmp_path: Path):
 
 
 def test_run_status_marks_run_failed_when_runtime_exited(tmp_path: Path):
-    service, _, _, runtime, _, _, _ = configured(tmp_path)
+    service, _, _, runtime, _, _, cleaner = configured(tmp_path)
     service.start(
         "run-one",
         agent_id="agent-titan",
@@ -391,10 +391,11 @@ def test_run_status_marks_run_failed_when_runtime_exited(tmp_path: Path):
     run = service.status("run-one")
 
     assert run.state is RunState.FAILED
+    assert cleaner.cleaned == ["run-one"]
 
 
 def test_run_list_reconciles_running_runtime_state(tmp_path: Path):
-    service, _, _, runtime, _, _, _ = configured(tmp_path)
+    service, _, _, runtime, _, _, cleaner = configured(tmp_path)
     service.start(
         "run-one",
         agent_id="agent-titan",
@@ -410,3 +411,4 @@ def test_run_list_reconciles_running_runtime_state(tmp_path: Path):
     runs = service.list()
 
     assert runs[0].state is RunState.FAILED
+    assert cleaner.cleaned == ["run-one"]

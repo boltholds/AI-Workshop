@@ -274,6 +274,13 @@ class RunService:
         if runtime_status.state is RuntimeWorkloadState.RUNNING:
             return run
 
+        cleanup_errors: list[Exception] = []
+        for cleaner in self.run_cleaners:
+            try:
+                cleaner.cleanup_run(run.run_id)
+            except Exception as exc:
+                cleanup_errors.append(exc)
+
         failed = run.model_copy(update={"state": RunState.FAILED})
         self._runs[run.run_id] = failed
         try:
@@ -281,6 +288,10 @@ class RunService:
         except Exception:
             self._runs[run.run_id] = run
             raise
+        if cleanup_errors:
+            raise RuntimeError(
+                f"run reconciliation cleanup failed in {len(cleanup_errors)} operation(s)"
+            ) from cleanup_errors[0]
         return failed
 
     def _require(self, run_id: str) -> AgentRun:

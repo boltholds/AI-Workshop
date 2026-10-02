@@ -20,6 +20,8 @@ def build_server(
     run_service=None,
     authorization_service=None,
     principal_resolver=None,
+    mcp_proxy_service=None,
+    mcp_promotion_registry=None,
 ):
     from mcp.server.mcpserver import MCPServer
 
@@ -115,6 +117,19 @@ def build_server(
             principal_resolver,
         )
 
+    if mcp_proxy_service is not None:
+        if principal_resolver is None:
+            raise ValueError(
+                "principal resolver is required for dynamic MCP tools"
+            )
+        from ai_workshop.gateway.mcp_runtime_tools import register_mcp_runtime_tools
+        register_mcp_runtime_tools(
+            server,
+            mcp_proxy_service,
+            principal_resolver,
+            promotion_registry=mcp_promotion_registry,
+        )
+
     from ai_workshop.gateway.recovery_tools import register_recovery_tools
     register_recovery_tools(
         server,
@@ -157,6 +172,8 @@ def run_gateway(
     run_service=None,
     authorization_service=None,
     principal_resolver=None,
+    mcp_proxy_service=None,
+    mcp_promotion_registry=None,
 ) -> None:
     server = build_server(
         workspace_url,
@@ -173,6 +190,8 @@ def run_gateway(
         run_service=run_service,
         authorization_service=authorization_service,
         principal_resolver=principal_resolver,
+        mcp_proxy_service=mcp_proxy_service,
+        mcp_promotion_registry=mcp_promotion_registry,
     )
     server.run(
         transport="streamable-http",
