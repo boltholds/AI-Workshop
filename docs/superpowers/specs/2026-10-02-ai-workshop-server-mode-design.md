@@ -131,11 +131,17 @@ Agents and users interact through bounded typed operations such as:
 
 The controller validates image, mount, network, resource, and permission policies before creating containers.
 
-### 5.2 Persistence
+### 5.2 Persistence and storage visibility
 
 Rootless engine state is persistent across Workshop restarts.
 
 Project source, Git metadata, agent identity state, browser state, audit logs, recovery artifacts, and credential metadata use separate storage domains so infrastructure resets cannot silently destroy repositories.
+
+Server-owned project/run storage is mounted at a stable path into both the Server Controller and the rootless engine service. The controller creates canonical repositories and run worktrees there; the rootless daemon sees the same paths and may bind only the selected run workspace into the corresponding child container.
+
+This shared storage is Workshop-owned persistent storage, not an arbitrary host path. AgentRun containers never receive the whole project store, only their explicitly assigned workspace and other explicitly declared volumes.
+
+The rootless engine control socket is shared only with the Server Controller through a dedicated private socket volume. It is not mounted into AgentRun, MCP runtime, browser, ingress, Forgejo, or project-service containers.
 
 ## 6. Project Sources and Storage
 
@@ -332,6 +338,22 @@ Internal-only services receive no external route.
 
 Databases, rootless engine control sockets, workspace private APIs, browser control APIs, and internal MCP transports remain private by default.
 
+### 11.1 Runtime-to-ingress bridge
+
+Project services created by the nested rootless engine are not attached directly to the outer deployment network.
+
+When an authorized service is published, the Server Controller allocates a private runtime endpoint on the rootless-engine service and binds the child service only to that endpoint. The ingress route targets this private endpoint through the Workshop server network.
+
+The allocated endpoint:
+
+- is not bound to the server LAN interface;
+- is reachable only by authorized Workshop infrastructure such as ingress and diagnostics;
+- is removed when the route/service is unpublished;
+- is tracked as part of the service/route lifecycle;
+- cannot be chosen as an arbitrary host port by an agent.
+
+This gives the ingress access to explicitly published nested services without exposing the inner Docker network or creating a general port-forwarding primitive.
+
 ## 12. Workshop Identity
 
 Server Mode introduces a unified identity boundary in front of administrative and agent-facing capabilities.
@@ -355,9 +377,9 @@ Server Mode supports autonomous HTTPS on a private LAN.
 
 Workshop may create a local certificate authority and automatically issue certificates for configured Workshop routes.
 
-The CA private key is stored in dedicated protected state and is never exposed to AgentRun containers.
+The CA private key is stored in a dedicated private state domain with encryption at rest when the configured secret backend supports it. The key is never exposed to AgentRun containers, MCP runtimes, project services, or ordinary filesystem APIs.
 
-Administrators can export only the public trust certificate for installation on trusted client devices.
+Administrators can export only the public trust certificate for installation on trusted client devices. Exporting or rotating CA private material is a separate administrative recovery operation and is not part of normal Workshop APIs.
 
 ### 13.2 External ACME
 
