@@ -91,7 +91,7 @@ def test_server_control_image_installs_git_and_ssh_client():
 def test_final_server_deployment_contains_required_outer_services():
     compose = load_yaml("deploy/server/compose.yaml")
     services = compose["services"]
-    assert {"server-control", "browser", "ingress"} <= set(services)
+    assert {"server-control", "gateway", "browser", "ingress"} <= set(services)
     assert "rootless-runtime" not in services
 
 
@@ -100,11 +100,14 @@ def test_final_server_deployment_never_mounts_host_docker_socket():
     assert "/var/run/docker.sock" not in text
 
 
-def test_final_server_deployment_only_ingress_publishes_host_port():
+def test_final_server_deployment_public_ports_are_limited_and_mcp_is_loopback_only():
     compose = load_yaml("deploy/server/compose.yaml")
     services = compose["services"]
     published = {name for name, spec in services.items() if spec.get("ports")}
-    assert published == {"ingress"}
+    assert published == {"gateway", "ingress"}
+
+    gateway_ports = services["gateway"]["ports"]
+    assert gateway_ports == ["127.0.0.1:${AI_WORKSHOP_MCP_PORT:-8765}:8765"]
 
 
 def test_final_server_deployment_runtime_socket_is_host_bind_and_control_plane_only():
@@ -154,3 +157,10 @@ def test_final_server_control_maps_host_gateway():
     compose = load_yaml("deploy/server/compose.yaml")
     extra_hosts = compose["services"]["server-control"]["extra_hosts"]
     assert "host.docker.internal:host-gateway" in extra_hosts
+
+
+def test_final_server_gateway_does_not_receive_runtime_socket():
+    compose = load_yaml("deploy/server/compose.yaml")
+    mounts = [str(item) for item in compose["services"]["gateway"]["volumes"]]
+    assert all("docker.sock" not in item for item in mounts)
+    assert any("AI_WORKSHOP_STORAGE_ROOT" in item for item in mounts)
