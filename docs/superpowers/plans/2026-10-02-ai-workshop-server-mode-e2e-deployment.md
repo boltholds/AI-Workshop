@@ -38,6 +38,10 @@
 - Modify: `README.md`
 - Test: `tests/unit/server/test_deployment_manifest.py`
 
+**Interfaces:**
+- Consumes: Server Runtime, Ingress/Auth/TLS, Browser, Identity/Run and Recovery service entrypoints.
+- Produces: one declarative outer deployment manifest.
+
 - [ ] Write failing manifest security/dependency tests.
 - [ ] Verify RED.
 - [ ] Assemble required services from previous plans into one deployment.
@@ -52,6 +56,10 @@
 - Create: `scripts/server-bootstrap.ps1`
 - Test: `tests/integration/server/test_bootstrap.py`
 
+**Interfaces:**
+- Consumes: deployment manifest and first-admin/bootstrap services.
+- Produces: idempotent initialized Server Mode state.
+
 - [ ] Write failing first-admin/local-CA/storage initialization tests including `test_server_bootstrap_recovers_from_partial_initialization`.
 - [ ] Verify RED.
 - [ ] Implement idempotent bootstrap with no secret rotation on rerun.
@@ -62,6 +70,10 @@
 
 **Files:**
 - Test: `tests/e2e/test_server_restart.py`
+
+**Interfaces:**
+- Consumes: all persistent state domains and runtime health interfaces.
+- Produces: acceptance evidence only; no new public API.
 
 - [ ] Build fixtures for persistent project, identity, browser state, and nested service.
 - [ ] Add `test_restart_preserves_all_persistent_domains`.
@@ -74,6 +86,10 @@
 **Files:**
 - Create: `tests/e2e/test_full_server_mode.py`
 - Create: `tests/fixtures/server_mode/`
+
+**Interfaces:**
+- Consumes: public Server Mode MCP/API surfaces only, plus controlled bootstrap fixtures.
+- Produces: end-to-end proof of the Spec §28 workflow.
 
 - [ ] Write the complete failing acceptance scenario from Spec §28.
 - [ ] Include two parallel AgentRuns with independent worktrees.
@@ -89,6 +105,10 @@
 - Create: `deploy/server/offline.example.yaml`
 - Test: `tests/unit/server/test_offline_profile.py`
 
+**Interfaces:**
+- Consumes: server deployment/config models.
+- Produces: offline/LAN configuration profile.
+
 - [ ] Write `test_offline_profile_has_no_required_public_dependencies`.
 - [ ] Verify RED.
 - [ ] Implement offline configuration with local CA and no mandatory public forge/OIDC.
@@ -102,6 +122,10 @@
 - Create: `docs/server/security-model.md`
 - Create: `docs/server/backup-recovery.md`
 - Modify: `README.md`
+
+**Interfaces:**
+- Consumes: final deployment behavior.
+- Produces: operator-facing deployment, security, backup and recovery guidance.
 
 - [ ] Document deploy/bootstrap/upgrade/backup/recovery and trust boundaries.
 - [ ] Run `uv run pytest -v`.
