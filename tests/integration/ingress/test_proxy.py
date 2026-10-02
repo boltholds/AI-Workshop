@@ -173,7 +173,7 @@ def test_authenticated_route_rejects_missing_bearer_token(monkeypatch):
     adapter = ProxyAdapter(
         authenticator=FakeIngressAuthenticator(),
     )
-    route = route_for("protected", "workshop.local", 41010).model_copy(
+    route = route("protected", "workshop.local", 41010).model_copy(
         update={
             "auth_policy": IngressAuthPolicy.AUTHENTICATED,
             "required_scope": "mcp.call",
@@ -204,7 +204,7 @@ def test_authenticated_route_forwards_verified_principal_and_strips_spoofed_head
     monkeypatch.setattr(httpx.AsyncClient, "request", fake_request)
     authenticator = FakeIngressAuthenticator()
     adapter = ProxyAdapter(authenticator=authenticator)
-    route = route_for("protected", "workshop.local", 41010).model_copy(
+    route = route("protected", "workshop.local", 41010).model_copy(
         update={
             "auth_policy": IngressAuthPolicy.AUTHENTICATED,
             "required_scope": "mcp.call",
@@ -235,7 +235,7 @@ def test_public_route_does_not_require_authenticator(monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "request", fake_request)
     adapter = ProxyAdapter()
-    adapter.apply([route_for("public", "app.workshop.local", 41011)], {})
+    adapter.apply([route("public", "app.workshop.local", 41011)], {})
 
     response = TestClient(adapter.app).get(
         "/",
