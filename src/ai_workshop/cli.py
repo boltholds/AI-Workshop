@@ -86,6 +86,12 @@ def build_parser() -> argparse.ArgumentParser:
     server_doctor.add_argument("--config", type=Path, required=True)
     server_doctor.add_argument("--state-root", type=Path, default=Path("/state"))
 
+    server_gateway = server_commands.add_parser("gateway")
+    server_gateway.add_argument("--config", type=Path, required=True)
+    server_gateway.add_argument("--state-root", type=Path, default=Path("/state"))
+    server_gateway.add_argument("--host", default="0.0.0.0")
+    server_gateway.add_argument("--port", type=int, default=8765)
+
     browser = commands.add_parser("browser")
     browser.add_argument("--profile", type=Path, default=Path("/data/browser-profile"))
     browser.add_argument("--artifacts", type=Path, default=Path("/data/artifacts"))
@@ -235,6 +241,17 @@ def main(argv: list[str] | None = None) -> int:
                 sort_keys=True,
             ))
             return report.exit_code
+
+        if args.server_command == "gateway":
+            from ai_workshop.server.gateway import run_server_gateway
+
+            run_server_gateway(
+                config,
+                state_root=args.state_root,
+                host=args.host,
+                port=args.port,
+            )
+            return 0
 
     if args.command == "doctor":
         import json
