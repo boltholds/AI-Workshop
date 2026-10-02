@@ -1,0 +1,4 @@
+storage_root: /srv/ai-workshop
+private_endpoint_host: rootless-runtime
+private_endpoint_start_port: 41000
+private_endpoint_end_port: 41999
