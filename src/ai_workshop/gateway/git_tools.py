@@ -207,6 +207,88 @@ def register_git_tools(server, git, destructive=None) -> None:
             ).model_dump(mode="json")
 
         @server.tool()
+        def git_delete_branch_preview(
+            project_id: str,
+            branch: str,
+        ) -> dict[str, object]:
+            return safe(
+                destructive.preview_delete_branch,
+                project_id,
+                branch,
+            ).model_dump(mode="json")
+
+        @server.tool()
+        def git_delete_branch_prepare(
+            project_id: str,
+            branch: str,
+            ttl_seconds: float = 300.0,
+        ) -> dict[str, object]:
+            preview = safe(
+                destructive.preview_delete_branch,
+                project_id,
+                branch,
+            )
+            return safe(
+                destructive.prepare,
+                preview,
+                ttl_seconds=ttl_seconds,
+            ).model_dump()
+
+        @server.tool()
+        def git_delete_branch(
+            project_id: str,
+            branch: str,
+            confirmation_token: str,
+        ) -> dict[str, object]:
+            return safe(
+                destructive.delete_branch,
+                project_id,
+                branch,
+                confirmation_token,
+            ).model_dump(mode="json")
+
+        @server.tool()
+        def git_delete_tag_preview(
+            project_id: str,
+            tag: str,
+        ) -> dict[str, object]:
+            return safe(
+                destructive.preview_delete_tag,
+                project_id,
+                tag,
+            ).model_dump(mode="json")
+
+        @server.tool()
+        def git_delete_tag_prepare(
+            project_id: str,
+            tag: str,
+            ttl_seconds: float = 300.0,
+        ) -> dict[str, object]:
+            preview = safe(
+                destructive.preview_delete_tag,
+                project_id,
+                tag,
+            )
+            return safe(
+                destructive.prepare,
+                preview,
+                ttl_seconds=ttl_seconds,
+            ).model_dump()
+
+        @server.tool()
+        def git_delete_tag(
+            project_id: str,
+            tag: str,
+            confirmation_token: str,
+        ) -> dict[str, object]:
+            return safe(
+                destructive.delete_tag,
+                project_id,
+                tag,
+                confirmation_token,
+            ).model_dump(mode="json")
+
+        @server.tool()
         def git_force_push_preview(
             project_id: str,
             branch: str,
