@@ -313,4 +313,14 @@ jobs:
       - name: Scan deployment trust boundaries
         run: |
           ! grep -R -E "(/root/\.ssh|/home/[^ ]+/\.ssh|/var/run/docker.sock)" deploy/server
-          test "$(grep -R "server-runtime-socket" deploy/server/compose.yaml | wc -l)" -le 2
+          uv run python - <<'PY'
+          from pathlib import Path
+          import yaml
+          compose = yaml.safe_load(Path("deploy/server/compose.yaml").read_text())
+          consumers = set()
+          for name, service in compose["services"].items():
+              for volume in service.get("volumes", []):
+                  if "server-runtime-socket" in str(volume):
+                      consumers.add(name)
+          assert consumers == {"rootless-runtime", "server-control"}, consumers
+          PY
