@@ -231,3 +231,18 @@ def test_default_git_service_rejects_untrusted_local_remote(tmp_path: Path):
 
     with pytest.raises(KeyError):
         projects.get("blocked")
+
+
+def test_remote_set_rejects_ssh_remote_with_embedded_password(tmp_path: Path):
+    remote, _ = init_remote(tmp_path)
+    git, _ = service(tmp_path)
+    git.clone("demo", str(remote))
+
+    with pytest.raises(ValueError, match="credential"):
+        git.remote_set(
+            "demo",
+            "origin",
+            "ssh://git:super-secret@example.test/team/repo.git",
+        )
+
+    assert "super-secret" not in git.remote_list("demo")["origin"]
