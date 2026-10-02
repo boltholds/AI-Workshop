@@ -1,0 +1,108 @@
+services:
+  rootless-runtime:
+    image: docker:29.8.1-dind-rootless@sha256:1f029db43a32fbb1465fe8ff4327d405154876946986170e97d7861232a8227a
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+      DOCKER_HOST: unix:///run/user/1000/docker.sock
+      XDG_RUNTIME_DIR: /run/user/1000
+    volumes:
+      - server-runtime-data:/home/rootless/.local/share/docker
+      - server-runtime-socket:/run/user
+      - server-storage:/srv/ai-workshop
+    healthcheck:
+      test: ["CMD", "docker", "--host", "unix:///run/user/1000/docker.sock", "info"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+    networks: [server-control]
+
+  server-control:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    command:
+      - server
+      - serve
+      - --config
+      - /config/server.yaml
+      - --state-root
+      - /state
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8770"
+    depends_on:
+      rootless-runtime:
+        condition: service_healthy
+    volumes:
+      - ./config/server.yaml:/config/server.yaml:ro
+      - server-runtime-socket:/run/ai-workshop-runtime:ro
+      - server-storage:/srv/ai-workshop
+      - server-state:/state
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8770/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [server-control]
+
+  browser:
+    build:
+      context: ../..
+      dockerfile: browser/Dockerfile
+    environment:
+      AI_WORKSHOP_BROWSER_TOKEN_FILE: /run/secrets/browser_token
+      AI_WORKSHOP_BROWSER_TOKEN: ${AI_WORKSHOP_BROWSER_TOKEN}
+    volumes:
+      - browser-profile:/data/browser-profile
+      - browser-artifacts:/data/artifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8767/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [server-control]
+
+  ingress:
+    build:
+      context: ../..
+      dockerfile: server/Dockerfile
+    command:
+      - server
+      - serve
+      - --config
+      - /config/server.yaml
+      - --state-root
+      - /state
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8443"
+    depends_on:
+      server-control:
+        condition: service_healthy
+    volumes:
+      - ./config/server.yaml:/config/server.yaml:ro
+      - server-state:/state
+      - server-ca:/var/lib/ai-workshop/ca
+    ports:
+      - "${AI_WORKSHOP_HTTPS_BIND:-127.0.0.1:8443}:8443"
+    restart: unless-stopped
+    networks: [server-control]
+
+volumes:
+  server-runtime-data:
+  server-runtime-socket:
+  server-storage:
+  server-state:
+  server-ca:
+  browser-profile:
+  browser-artifacts:
+
+networks:
+  server-control:
+    name: ai-workshop-server-control
