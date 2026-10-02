@@ -56,6 +56,7 @@ class RunService:
         base_ref: str,
         writable: bool,
         limits: RunResourceLimits = RunResourceLimits(),
+        initiator_principal_id: str | None = None,
     ) -> AgentRun:
         with self._lock:
             if run_id in self._runs:
@@ -65,10 +66,28 @@ class RunService:
             if agent.status is AgentStatus.ARCHIVED:
                 raise ValueError("cannot start run for archived agent")
 
-            permissions = self.authorization.effective_permissions(
+            agent_permissions = self.authorization.effective_permissions(
                 agent.principal_id,
                 project_id,
             )
+            initiator_id = initiator_principal_id or agent.principal_id
+            if initiator_id == agent.principal_id:
+                permissions = agent_permissions
+            else:
+                initiator_permissions = self.authorization.effective_permissions(
+                    initiator_id,
+                    project_id,
+                )
+                permissions = PermissionSet(
+                    principal_id=agent.principal_id,
+                    initiator_principal_id=initiator_id,
+                    project_id=project_id,
+                    permissions=(
+                        agent_permissions.permissions
+                        & initiator_permissions.permissions
+                    ),
+                )
+
             required = "filesystem.write" if writable else "filesystem.read"
             if not permissions.allows(required):
                 raise PermissionError(f"permission denied: {required}")
@@ -119,7 +138,7 @@ class RunService:
                 self._persist()
                 self.audit.record(
                     AuditEvent(
-                        actor_principal_id=agent.principal_id,
+                        actor_principal_id=initiator_id,
                         owner_principal_id=agent.owner_principal_id,
                         run_id=run_id,
                         project_id=project_id,
@@ -144,7 +163,12 @@ class RunService:
                 self.workspaces.remove(run_id)
                 raise
 
-    def stop(self, run_id: str) -> AgentRun:
+    def stop(
+        self,
+        run_id: str,
+        *,
+        initiator_principal_id: str | None = None,
+    ) -> AgentRun:
         with self._lock:
             current = self._require(run_id)
             if current.state is RunState.STOPPED:
@@ -181,7 +205,10 @@ class RunService:
             self._persist()
             self.audit.record(
                 AuditEvent(
-                    actor_principal_id=current.principal_id,
+                    actor_principal_id=(
+                        initiator_principal_id
+                        or current.principal_id
+                    ),
                     owner_principal_id=self.agents.get(current.agent_id).owner_principal_id,
                     run_id=run_id,
                     project_id=current.project_id,
