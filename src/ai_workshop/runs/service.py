@@ -91,6 +91,7 @@ class RunService:
             if not permissions.allows(required):
                 raise PermissionError(f"permission denied: {required}")
 
+            self.runtime.ensure_image(self.runtime_image)
             workspace = self.workspaces.create(
                 project_id,
                 run_id,
