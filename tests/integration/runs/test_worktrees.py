@@ -51,8 +51,8 @@ def test_parallel_runs_use_distinct_worktrees(tmp_path: Path):
     assert (first.path / "README.md").read_text(encoding="utf-8") == "base\n"
     assert (second.path / "README.md").read_text(encoding="utf-8") == "base\n"
     assert run_git(first.path, "rev-parse", "HEAD") == run_git(second.path, "rev-parse", "HEAD")
-    assert run_git(first.path, "symbolic-ref", "-q", "HEAD") == ""
-    assert run_git(second.path, "symbolic-ref", "-q", "HEAD") == ""
+    assert run_git(first.path, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
+    assert run_git(second.path, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
 
 
 def test_run_workspace_isolated_from_canonical_project(tmp_path: Path):
