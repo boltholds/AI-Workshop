@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 import threading
-from typing import Mapping, Sequence
+from typing import Mapping, Protocol, Sequence
 
 import httpx
 from fastapi import FastAPI, Request
 from starlette.responses import Response
 
-from ai_workshop.ingress.models import IngressRoute
+from ai_workshop.ingress.models import IngressAuthPolicy, IngressRoute
 
 
 _HOP_BY_HOP_HEADERS = frozenset(
@@ -25,17 +25,28 @@ _HOP_BY_HOP_HEADERS = frozenset(
 )
 
 
+class IngressAuthenticator(Protocol):
+    def authenticate(
+        self,
+        token: str,
+        *,
+        required_scope: str | None,
+    ) -> str: ...
+
+
 class ProxyAdapter:
     def __init__(
         self,
         *,
         allowed_target_hosts: frozenset[str] = frozenset({"rootless-runtime"}),
         timeout_seconds: float = 60.0,
+        authenticator: IngressAuthenticator | None = None,
     ):
         if not allowed_target_hosts:
             raise ValueError("at least one target host must be allowed")
         self.allowed_target_hosts = allowed_target_hosts
         self.timeout_seconds = timeout_seconds
+        self.authenticator = authenticator
         self._lock = threading.RLock()
         self._routes: dict[str, IngressRoute] = {}
         self._certificates: dict[str, tuple[Path, Path]] = {}
@@ -117,14 +128,52 @@ class ProxyAdapter:
         if query:
             target += f"?{query}"
 
+        principal_id: str | None = None
+        if route.auth_policy is IngressAuthPolicy.AUTHENTICATED:
+            authorization = request.headers.get("authorization", "")
+            scheme, separator, raw_token = authorization.partition(" ")
+            if (
+                not separator
+                or scheme.lower() != "bearer"
+                or not raw_token.strip()
+            ):
+                return Response(
+                    content=b"Authentication required",
+                    status_code=401,
+                    media_type="text/plain",
+                )
+            if self.authenticator is None:
+                return Response(
+                    content=b"Authentication unavailable",
+                    status_code=503,
+                    media_type="text/plain",
+                )
+            try:
+                principal_id = self.authenticator.authenticate(
+                    raw_token.strip(),
+                    required_scope=route.required_scope,
+                )
+            except PermissionError:
+                return Response(
+                    content=b"Authentication failed",
+                    status_code=401,
+                    media_type="text/plain",
+                )
+
         headers = {
             key: value
             for key, value in request.headers.items()
             if key.lower() not in _HOP_BY_HOP_HEADERS
-            and key.lower() != "host"
+            and key.lower() not in {
+                "host",
+                "authorization",
+                "x-workshop-principal-id",
+            }
         }
         headers["x-forwarded-host"] = hostname
         headers["x-forwarded-proto"] = request.url.scheme
+        if principal_id is not None:
+            headers["x-workshop-principal-id"] = principal_id
 
         try:
             async with httpx.AsyncClient(
