@@ -84,9 +84,18 @@ class RootlessDockerController:
         self.executor = executor or SubprocessRuntimeExecutor()
         self.timeout_seconds = timeout_seconds
 
+    def ensure_image(self, image: str) -> None:
+        validated = RuntimeWorkloadSpec(
+            workload_id="image-validation",
+            image=image,
+        ).image
+        self._execute(self._base() + ["pull", "--", validated])
+
     def create(self, spec: RuntimeWorkloadSpec) -> RuntimeWorkloadStatus:
         self.policy.validate(spec)
         network_grants = self.network_policy.allowed_networks(spec)
+        for grant in network_grants:
+            self._ensure_network(grant)
         endpoints = [
             self.endpoint_registry.allocate(spec.workload_id, port)
             for port in spec.container_ports
@@ -101,6 +110,12 @@ class RootlessDockerController:
                     f"{endpoint.host_port}:{endpoint.container_port}",
                 ]
             )
+        for mount in spec.mounts:
+            mount_value = (
+                f"type=bind,src={mount.source},dst={mount.target}"
+                + (",readonly" if mount.read_only else "")
+            )
+            argv.extend(["--mount", mount_value])
         for variable in spec.environment:
             argv.extend(["--env", f"{variable.name}={variable.value}"])
         argv.extend(["--", spec.image, *spec.command])
@@ -186,6 +201,20 @@ class RootlessDockerController:
     ) -> RuntimeEndpoint:
         self._validated_id(workload_id)
         return self.endpoint_registry.require(workload_id, container_port)
+
+    def _ensure_network(self, grant) -> None:
+        inspect_result = self.executor.run(
+            self._base() + ["network", "inspect", "--", grant.network_name],
+            timeout_seconds=self.timeout_seconds,
+        )
+        if inspect_result.exit_code == 0:
+            return
+
+        argv = self._base() + ["network", "create"]
+        if grant.internal:
+            argv.append("--internal")
+        argv.extend(["--", grant.network_name])
+        self._execute(argv)
 
     def _execute(self, argv: list[str]) -> RuntimeCommandResult:
         result = self.executor.run(argv, timeout_seconds=self.timeout_seconds)
