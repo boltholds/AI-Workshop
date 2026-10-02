@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from mcp.server.mcpserver.context import Context
+
 
 def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_registry=None) -> None:
     def actor() -> str:
@@ -91,7 +93,7 @@ def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_regi
             server_id: str,
             tool_name: str,
             exposed_name: str | None = None,
-            ctx=None,
+            ctx: Context = None,
         ) -> dict[str, object]:
             name = exposed_name or tool_name
             existing = {item.name for item in await server.list_tools()}
@@ -135,7 +137,7 @@ def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_regi
         @server.tool(name="mcp.unpromote")
         async def mcp_unpromote(
             exposed_name: str,
-            ctx=None,
+            ctx: Context = None,
         ) -> dict[str, bool]:
             promotion_registry.resolve(exposed_name)
             server.remove_tool(exposed_name)
