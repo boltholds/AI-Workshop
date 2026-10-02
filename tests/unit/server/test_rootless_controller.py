@@ -347,3 +347,38 @@ def test_create_ensures_private_network_is_internal_before_container():
         "--",
         "ai-workshop-agent-runs",
     ]
+
+
+class FailingSecondEndpointRegistry(NoEndpointRegistry):
+    def __init__(self):
+        super().__init__()
+        self.allocations = 0
+
+    def allocate(self, workload_id: str, container_port: int) -> RuntimeEndpoint:
+        self.allocations += 1
+        if self.allocations == 2:
+            raise RuntimeError("endpoint pool exhausted")
+        return super().allocate(workload_id, container_port)
+
+
+def test_create_releases_partial_endpoint_allocations_when_allocation_fails():
+    executor = CapturingExecutor()
+    endpoints = FailingSecondEndpointRegistry()
+    ctl = RootlessDockerController(
+        policy=AllowPolicy(),
+        network_policy=AllowNetworkPolicy(),
+        endpoint_registry=endpoints,
+        executor=executor,
+    )
+
+    with pytest.raises(RuntimeError, match="endpoint pool exhausted"):
+        ctl.create(
+            RuntimeWorkloadSpec(
+                workload_id="service-1",
+                image="nginx:latest",
+                container_ports=(8080, 8081),
+            )
+        )
+
+    assert endpoints.released == ["service-1"]
+    assert executor.calls == []
