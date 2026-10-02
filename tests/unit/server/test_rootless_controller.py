@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path, PurePosixPath
 
 import pytest
 
 from ai_workshop.server.models import (
     RuntimeEndpoint,
     RuntimeEnvironmentVariable,
+    RuntimeMount,
     RuntimeWorkloadSpec,
     RuntimeWorkloadState,
 )
@@ -252,3 +254,50 @@ def test_remove_releases_private_endpoints():
     ctl.remove("service-1")
 
     assert endpoints.released == ["service-1"]
+
+
+def test_controller_can_explicitly_ensure_image():
+    ctl, executor = controller()
+
+    ctl.ensure_image("alpine:3.22")
+
+    assert executor.calls[-1][0] == [
+        "docker",
+        "--host",
+        f"unix://{DEFAULT_RUNTIME_SOCKET}",
+        "pull",
+        "--",
+        "alpine:3.22",
+    ]
+
+
+def test_create_renders_validated_runtime_mount(tmp_path: Path):
+    executor = CapturingExecutor()
+    ctl = RootlessDockerController(
+        policy=AllowPolicy(),
+        network_policy=AllowNetworkPolicy(),
+        endpoint_registry=NoEndpointRegistry(),
+        executor=executor,
+    )
+    source = (tmp_path / "workspace").resolve()
+    source.mkdir()
+
+    ctl.create(
+        RuntimeWorkloadSpec(
+            workload_id="run-123",
+            image="python:3.12-slim",
+            mounts=(
+                RuntimeMount(
+                    source=source,
+                    target=PurePosixPath("/workspace/project"),
+                    read_only=True,
+                ),
+            ),
+        )
+    )
+
+    argv, _ = executor.calls[-1]
+    mount_value = argv[argv.index("--mount") + 1]
+    assert f"src={source}" in mount_value
+    assert "dst=/workspace/project" in mount_value
+    assert "readonly" in mount_value
