@@ -206,3 +206,24 @@ def test_remote_set_rejects_http_remote_with_embedded_credentials(tmp_path: Path
         )
 
     assert "super-secret" not in git.remote_list("demo")["origin"]
+
+
+def test_default_git_service_rejects_untrusted_local_remote(tmp_path: Path):
+    remote, _ = init_remote(tmp_path)
+    storage = ServerStorage(tmp_path / "locked-server-storage")
+    projects = ProjectStore(
+        storage=storage,
+        state_path=tmp_path / "locked-state" / "projects.json",
+    )
+    credentials = CredentialStore(
+        state_path=tmp_path / "locked-state" / "credentials.json",
+        secret_root=tmp_path / "locked-secrets",
+        forbidden_roots=(storage.root,),
+    )
+    git = GitRepositoryService(projects, credentials)
+
+    with pytest.raises(ValueError, match="local Git remote"):
+        git.clone("blocked", str(remote))
+
+    with pytest.raises(KeyError):
+        projects.get("blocked")
