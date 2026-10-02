@@ -165,6 +165,8 @@ def test_run_start_captures_permissions_and_mounts_only_run_workspace(tmp_path: 
     spec = runtime.created[0]
     assert spec.workload_id == "run-one"
     assert spec.image == "ai-workshop-agent:server"
+    assert spec.entrypoint is None
+    assert spec.command == ("run-host",)
     assert spec.cpu_limit == 2.0
     assert spec.memory_limit_mb == 2048
     assert len(spec.mounts) == 1
