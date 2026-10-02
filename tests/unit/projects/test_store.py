@@ -157,3 +157,13 @@ def test_list_is_stable_and_sorted(tmp_path: Path):
     store.register_git("alpha", remote_url="git@example.test:alpha.git")
 
     assert [item.project_id for item in store.list()] == ["alpha", "zeta"]
+
+
+def test_git_managed_project_rejects_http_remote_with_embedded_credentials(tmp_path: Path):
+    store = make_store(tmp_path)
+
+    with pytest.raises(ValueError, match="credential"):
+        store.register_git(
+            "secret-url",
+            remote_url="https://user:super-secret@example.test/team/repo.git",
+        )
