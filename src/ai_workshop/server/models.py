@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 from ipaddress import IPv4Address
+from pathlib import Path, PurePosixPath
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -25,6 +27,58 @@ class RuntimeEnvironmentVariable(StrictFrozenModel):
         return value
 
 
+class RuntimePidNamespace(StrEnum):
+    ISOLATED = "isolated"
+    HOST = "host"
+
+
+class RuntimeNetworkNamespace(StrEnum):
+    ISOLATED = "isolated"
+    HOST = "host"
+
+
+class RuntimeMount(StrictFrozenModel):
+    source: Path
+    target: PurePosixPath
+    read_only: bool = False
+
+    @field_validator("source")
+    @classmethod
+    def source_must_be_absolute(cls, value: Path) -> Path:
+        if not value.is_absolute():
+            raise ValueError("runtime mount source must be absolute")
+        return value
+
+    @field_validator("target")
+    @classmethod
+    def target_must_be_absolute(cls, value: PurePosixPath) -> PurePosixPath:
+        if not value.is_absolute():
+            raise ValueError("runtime mount target must be absolute")
+        return value
+
+
+class RuntimeDeviceMapping(StrictFrozenModel):
+    source: Path
+    target: PurePosixPath
+
+    @field_validator("source")
+    @classmethod
+    def device_source_must_be_absolute(cls, value: Path) -> Path:
+        if not value.is_absolute():
+            raise ValueError("device source must be absolute")
+        return value
+
+    @field_validator("target")
+    @classmethod
+    def device_target_must_be_absolute(cls, value: PurePosixPath) -> PurePosixPath:
+        if not value.is_absolute():
+            raise ValueError("device target must be absolute")
+        return value
+
+
+RuntimePort = Annotated[int, Field(ge=1, le=65535)]
+
+
 class RuntimeWorkloadState(StrEnum):
     CREATED = "created"
     RUNNING = "running"
@@ -38,6 +92,12 @@ class RuntimeWorkloadSpec(StrictFrozenModel):
     image: str = Field(min_length=1)
     command: tuple[str, ...] = ()
     environment: tuple[RuntimeEnvironmentVariable, ...] = ()
+    mounts: tuple[RuntimeMount, ...] = ()
+    privileged: bool = False
+    pid_namespace: RuntimePidNamespace = RuntimePidNamespace.ISOLATED
+    network_namespace: RuntimeNetworkNamespace = RuntimeNetworkNamespace.ISOLATED
+    devices: tuple[RuntimeDeviceMapping, ...] = ()
+    container_ports: tuple[RuntimePort, ...] = ()
 
     @field_validator("image")
     @classmethod
