@@ -6,6 +6,7 @@ import stat
 import threading
 
 from ai_workshop.credentials.git_env import GitCredentialContext
+from ai_workshop.credentials.http_token import HttpTokenCredentialContext
 from ai_workshop.credentials.models import (
     CredentialKind,
     CredentialProfile,
@@ -85,6 +86,15 @@ class CredentialStore:
         if not path.is_file():
             raise FileNotFoundError(f"credential secret is unavailable: {credential_id}")
         return GitCredentialContext(profile, path)
+
+    def http_token_context(self, credential_id: str) -> HttpTokenCredentialContext:
+        profile = self.get(credential_id)
+        if not isinstance(profile, HttpsTokenCredentialProfile):
+            raise TypeError("HTTP token credential required")
+        path = self.secret_path(credential_id)
+        if not path.is_file():
+            raise FileNotFoundError(f"credential secret is unavailable: {credential_id}")
+        return HttpTokenCredentialContext(profile, path)
 
     def _create(self, profile: CredentialProfile, secret: str) -> None:
         if not secret:
