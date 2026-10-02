@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from ipaddress import ip_address
 from pathlib import Path
 import re
 
@@ -15,6 +16,12 @@ def validate_dns_hostname(value: str) -> str:
     if hostname != value.strip().lower():
         raise ValueError("invalid hostname")
     if any(char in hostname for char in (":", "/", "*", "_")):
+        raise ValueError("invalid hostname")
+    try:
+        ip_address(hostname)
+    except ValueError:
+        pass
+    else:
         raise ValueError("invalid hostname")
     labels = hostname.split(".")
     if len(labels) < 2 or any(not label for label in labels):
