@@ -382,3 +382,19 @@ def test_create_releases_partial_endpoint_allocations_when_allocation_fails():
 
     assert endpoints.released == ["service-1"]
     assert executor.calls == []
+
+
+def test_create_renders_cpu_and_memory_limits():
+    ctl, executor = controller()
+    ctl.create(
+        RuntimeWorkloadSpec(
+            workload_id="run-limited",
+            image="python:3.12-slim",
+            cpu_limit=1.5,
+            memory_limit_mb=1536,
+        )
+    )
+
+    argv, _ = executor.calls[-1]
+    assert argv[argv.index("--cpus") + 1] == "1.5"
+    assert argv[argv.index("--memory") + 1] == "1536m"
