@@ -87,3 +87,17 @@ To connect the private localhost MCP endpoint to ChatGPT without publishing it t
 ## Server Mode forge integrations
 
 Server Mode supports provider-neutral GitHub, GitLab, and Forgejo hosting operations, with an optional embedded Forgejo profile. See [docs/server/forges.md](docs/server/forges.md) for profile, credential, binding, ingress, and persistence details.
+
+
+## Autonomous Server Mode deployment
+
+The complete autonomous Server Mode deployment lives in `deploy/server/compose.yaml`.
+
+Bootstrap once (or safely re-run after a partial initialization):
+
+```bash
+./scripts/server-bootstrap.sh
+docker compose -f deploy/server/compose.yaml up -d --build
+```
+
+See `docs/server/deployment.md`, `docs/server/security-model.md`, and `docs/server/backup-recovery.md`.
