@@ -226,7 +226,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Start autonomous Server Mode runtime
         run: |
-          docker compose -f compose.server.yaml up -d --build
+          if ! docker compose -f compose.server.yaml up -d --build; then
+            docker compose -f compose.server.yaml ps
+            docker compose -f compose.server.yaml logs rootless-runtime
+            exit 1
+          fi
           ready=0
           for i in $(seq 1 80); do
             if docker compose -f compose.server.yaml exec -T server-control \
