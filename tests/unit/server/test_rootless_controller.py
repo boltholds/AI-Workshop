@@ -194,6 +194,7 @@ class PrivateNetworkPolicy:
             NetworkGrant(
                 network_name="ai-workshop-agent-runs",
                 purpose=NetworkGrantPurpose.PRIVATE,
+                internal=True,
             ),
         )
 
@@ -301,3 +302,48 @@ def test_create_renders_validated_runtime_mount(tmp_path: Path):
     assert f"src={source}" in mount_value
     assert "dst=/workspace/project" in mount_value
     assert "readonly" in mount_value
+
+
+class MissingThenSuccessExecutor(CapturingExecutor):
+    def __init__(self):
+        super().__init__()
+        self.results = [
+            RuntimeCommandResult(exit_code=1, stdout="", stderr="not found"),
+            RuntimeCommandResult(exit_code=0, stdout="", stderr=""),
+            RuntimeCommandResult(exit_code=0, stdout="", stderr=""),
+        ]
+
+    def run(self, argv: list[str], *, timeout_seconds: float) -> RuntimeCommandResult:
+        self.calls.append((list(argv), timeout_seconds))
+        return self.results.pop(0)
+
+
+def test_create_ensures_private_network_is_internal_before_container():
+    executor = MissingThenSuccessExecutor()
+    ctl = RootlessDockerController(
+        policy=AllowPolicy(),
+        network_policy=PrivateNetworkPolicy(),
+        endpoint_registry=NoEndpointRegistry(),
+        executor=executor,
+    )
+
+    ctl.create(
+        RuntimeWorkloadSpec(
+            workload_id="run-123",
+            image="python:3.12-slim",
+        )
+    )
+
+    assert executor.calls[0][0][-4:] == [
+        "network",
+        "inspect",
+        "--",
+        "ai-workshop-agent-runs",
+    ]
+    assert executor.calls[1][0][-5:] == [
+        "network",
+        "create",
+        "--internal",
+        "--",
+        "ai-workshop-agent-runs",
+    ]
