@@ -1,0 +1,16 @@
+mode: offline
+public_dependencies:
+  oidc: false
+  public_forge: false
+  acme: false
+tls:
+  provider: local-ca
+forge:
+  embedded_forgejo: true
+network:
+  require_public_internet: false
+  bind: 0.0.0.0
+bootstrap:
+  allow_local_first_admin: true
+images:
+  policy: preloaded
