@@ -103,6 +103,12 @@ class RootlessDockerController:
                 for port in spec.container_ports
             ]
             argv = self._base() + ["create", "--name", spec.workload_id]
+            if spec.cpu_limit is not None:
+                argv.extend(["--cpus", format(spec.cpu_limit, "g")])
+            if spec.memory_limit_mb is not None:
+                argv.extend(["--memory", f"{spec.memory_limit_mb}m"])
+            if spec.entrypoint is not None:
+                argv.extend(["--entrypoint", spec.entrypoint])
             if network_grants:
                 argv.extend(["--network", network_grants[0].network_name])
             for endpoint in endpoints:
