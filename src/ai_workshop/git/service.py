@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
 import subprocess
 from typing import ContextManager
 
@@ -305,11 +306,7 @@ class GitRepositoryService:
         context: GitCredentialContext | None = None,
         check: bool = True,
     ) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
-        for key in _CONTROL_ENV:
-            env.pop(key, None)
-        if context is not None:
-            env.update(context.environment())
+        env = self._subprocess_environment(context)
         try:
             result = subprocess.run(
                 ["git", *args],
@@ -329,6 +326,40 @@ class GitRepositoryService:
                 detail = context.redact(detail)
             raise GitRepositoryError("GIT_COMMAND_FAILED", detail)
         return result
+
+    @staticmethod
+    def _subprocess_environment(
+        context: GitCredentialContext | None,
+    ) -> dict[str, str]:
+        allowed = (
+            "PATH",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "TMPDIR",
+            "TEMP",
+            "TMP",
+            "SYSTEMROOT",
+            "COMSPEC",
+            "PATHEXT",
+        )
+        env = {
+            key: os.environ[key]
+            for key in allowed
+            if key in os.environ
+        }
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+        env["GIT_CONFIG_GLOBAL"] = os.devnull
+        env["GIT_ASKPASS"] = ""
+        env["GIT_SSH_COMMAND"] = (
+            "ssh -o IdentitiesOnly=yes "
+            f"-o IdentityFile={shlex.quote(os.devnull)} "
+            "-o BatchMode=yes -o StrictHostKeyChecking=yes"
+        )
+        if context is not None:
+            env.update(context.environment())
+        return env
 
     @staticmethod
     def _remote_name(value: str) -> str:
