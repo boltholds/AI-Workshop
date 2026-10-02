@@ -128,6 +128,7 @@ class AgentService:
                 self._persist()
             except Exception:
                 self._agents.pop(agent_id, None)
+                self.principals.remove_unreferenced(principal.principal_id)
                 raise
             return agent
 
