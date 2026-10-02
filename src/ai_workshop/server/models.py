@@ -13,6 +13,18 @@ class StrictFrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class RuntimeEnvironmentVariable(StrictFrozenModel):
+    name: str = Field(min_length=1, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    value: str
+
+    @field_validator("value")
+    @classmethod
+    def value_must_not_contain_nul(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("environment value cannot contain NUL")
+        return value
+
+
 class RuntimeWorkloadState(StrEnum):
     CREATED = "created"
     RUNNING = "running"
@@ -25,6 +37,7 @@ class RuntimeWorkloadSpec(StrictFrozenModel):
     workload_id: str = Field(min_length=1, pattern=_IDENTIFIER_PATTERN)
     image: str = Field(min_length=1)
     command: tuple[str, ...] = ()
+    environment: tuple[RuntimeEnvironmentVariable, ...] = ()
 
     @field_validator("image")
     @classmethod
