@@ -151,3 +151,95 @@ def test_unknown_hostname_returns_misdirected_request():
     response = asyncio.run(request(adapter, "unknown.workshop.local"))
 
     assert response.status_code == 421
+
+
+class FakeIngressAuthenticator:
+    def __init__(self):
+        self.calls = []
+
+    def authenticate(self, token: str, *, required_scope: str | None):
+        self.calls.append((token, required_scope))
+        if token != "valid-token":
+            raise PermissionError("invalid token")
+        if required_scope not in {None, "mcp.call"}:
+            raise PermissionError("scope denied")
+        return "principal-service"
+
+
+def test_authenticated_route_rejects_missing_bearer_token(monkeypatch):
+    from fastapi.testclient import TestClient
+    from ai_workshop.ingress.models import IngressAuthPolicy
+
+    adapter = ProxyAdapter(
+        authenticator=FakeIngressAuthenticator(),
+    )
+    route = route_for("protected", "workshop.local", 41010).model_copy(
+        update={
+            "auth_policy": IngressAuthPolicy.AUTHENTICATED,
+            "required_scope": "mcp.call",
+        }
+    )
+    adapter.apply([route], {})
+
+    response = TestClient(adapter.app).get(
+        "/mcp",
+        headers={"host": "workshop.local"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_authenticated_route_forwards_verified_principal_and_strips_spoofed_header(
+    monkeypatch,
+):
+    from fastapi.testclient import TestClient
+    from ai_workshop.ingress.models import IngressAuthPolicy
+
+    captured = {}
+
+    async def fake_request(self, method, target, headers, content):
+        captured["headers"] = dict(headers)
+        return httpx.Response(200, content=b"ok")
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", fake_request)
+    authenticator = FakeIngressAuthenticator()
+    adapter = ProxyAdapter(authenticator=authenticator)
+    route = route_for("protected", "workshop.local", 41010).model_copy(
+        update={
+            "auth_policy": IngressAuthPolicy.AUTHENTICATED,
+            "required_scope": "mcp.call",
+        }
+    )
+    adapter.apply([route], {})
+
+    response = TestClient(adapter.app).get(
+        "/mcp",
+        headers={
+            "host": "workshop.local",
+            "authorization": "Bearer valid-token",
+            "x-workshop-principal-id": "spoofed",
+        },
+    )
+
+    assert response.status_code == 200
+    assert authenticator.calls == [("valid-token", "mcp.call")]
+    assert captured["headers"]["x-workshop-principal-id"] == "principal-service"
+    assert "authorization" not in captured["headers"]
+
+
+def test_public_route_does_not_require_authenticator(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    async def fake_request(self, method, target, headers, content):
+        return httpx.Response(200, content=b"ok")
+
+    monkeypatch.setattr(httpx.AsyncClient, "request", fake_request)
+    adapter = ProxyAdapter()
+    adapter.apply([route_for("public", "app.workshop.local", 41011)], {})
+
+    response = TestClient(adapter.app).get(
+        "/",
+        headers={"host": "app.workshop.local"},
+    )
+
+    assert response.status_code == 200
