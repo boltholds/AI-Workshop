@@ -18,6 +18,7 @@ from ai_workshop.server.models import (
     RuntimeMount,
     RuntimeWorkloadKind,
     RuntimeWorkloadSpec,
+    RuntimeWorkloadState,
 )
 from ai_workshop.server.runtime import RuntimeController
 
@@ -249,11 +250,14 @@ class RunService:
 
     def status(self, run_id: str) -> AgentRun:
         with self._lock:
-            return self._require(run_id)
+            return self._reconcile_runtime_state(self._require(run_id))
 
     def list(self) -> list[AgentRun]:
         with self._lock:
-            return [self._runs[key] for key in sorted(self._runs)]
+            return [
+                self._reconcile_runtime_state(self._runs[key])
+                for key in sorted(self._runs)
+            ]
 
     def effective_permissions_for_run(self, run_id: str) -> PermissionSet:
         run = self.status(run_id)
@@ -262,6 +266,22 @@ class RunService:
             project_id=run.project_id,
             permissions=run.effective_permissions,
         )
+
+    def _reconcile_runtime_state(self, run: AgentRun) -> AgentRun:
+        if run.state is not RunState.RUNNING:
+            return run
+        runtime_status = self.runtime.status(run.run_id)
+        if runtime_status.state is RuntimeWorkloadState.RUNNING:
+            return run
+
+        failed = run.model_copy(update={"state": RunState.FAILED})
+        self._runs[run.run_id] = failed
+        try:
+            self._persist()
+        except Exception:
+            self._runs[run.run_id] = run
+            raise
+        return failed
 
     def _require(self, run_id: str) -> AgentRun:
         run = self._runs.get(run_id)
