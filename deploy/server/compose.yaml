@@ -2,6 +2,8 @@ services:
   rootless-runtime:
     image: docker:29.8.1-dind-rootless@sha256:1f029db43a32fbb1465fe8ff4327d405154876946986170e97d7861232a8227a
     privileged: true
+    command:
+      - --host=unix:///run/user/1000/docker.sock
     environment:
       DOCKER_TLS_CERTDIR: ""
       DOCKER_HOST: unix:///run/user/1000/docker.sock

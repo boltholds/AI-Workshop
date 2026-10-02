@@ -100,4 +100,6 @@ Bootstrap once (or safely re-run after a partial initialization):
 docker compose -f deploy/server/compose.yaml up -d --build
 ```
 
-See `docs/server/deployment.md`, `docs/server/security-model.md`, and `docs/server/backup-recovery.md`.
+For a complete clean-host, step-by-step installation from zero, follow `docs/server/deployment.md`. It includes prerequisites, bootstrap, generated tokens, Compose startup, doctor checks, local CA trust, LAN/offline mode, upgrades, backup/recovery, and troubleshooting.
+
+See also `docs/server/security-model.md` and `docs/server/backup-recovery.md`.
