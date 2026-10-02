@@ -6,6 +6,7 @@ from typing import Protocol
 from ai_workshop.server.models import (
     RuntimeNetworkNamespace,
     RuntimePidNamespace,
+    RuntimeWorkloadKind,
     RuntimeWorkloadSpec,
 )
 from ai_workshop.server.runtime import DEFAULT_RUNTIME_SOCKET
@@ -35,6 +36,11 @@ class RuntimePolicy:
 
         runtime_socket = Path(DEFAULT_RUNTIME_SOCKET).resolve(strict=False)
         storage_root = self.storage.root.resolve()
+        assigned_root = (
+            storage_root
+            if spec.kind is RuntimeWorkloadKind.INFRASTRUCTURE
+            else self.storage.run_root(spec.workload_id).resolve()
+        )
         for mount in spec.mounts:
             source = mount.source.resolve(strict=False)
             if source == runtime_socket:
@@ -43,3 +49,9 @@ class RuntimePolicy:
                 source.relative_to(storage_root)
             except ValueError as exc:
                 raise ValueError("runtime mount source must stay inside server storage") from exc
+            try:
+                source.relative_to(assigned_root)
+            except ValueError as exc:
+                raise ValueError(
+                    "runtime mount source must stay inside assigned workload storage"
+                ) from exc
