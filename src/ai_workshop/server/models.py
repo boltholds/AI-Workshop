@@ -27,6 +27,18 @@ class RuntimeEnvironmentVariable(StrictFrozenModel):
         return value
 
 
+class RuntimeWorkloadKind(StrEnum):
+    AGENT_RUN = "agent-run"
+    MCP = "mcp"
+    PROJECT_SERVICE = "project-service"
+    INFRASTRUCTURE = "infrastructure"
+
+
+class RuntimeOutboundAccess(StrEnum):
+    NONE = "none"
+    INTERNET = "internet"
+
+
 class RuntimePidNamespace(StrEnum):
     ISOLATED = "isolated"
     HOST = "host"
@@ -92,6 +104,8 @@ class RuntimeWorkloadSpec(StrictFrozenModel):
     image: str = Field(min_length=1)
     command: tuple[str, ...] = ()
     environment: tuple[RuntimeEnvironmentVariable, ...] = ()
+    kind: RuntimeWorkloadKind = RuntimeWorkloadKind.AGENT_RUN
+    outbound: RuntimeOutboundAccess = RuntimeOutboundAccess.NONE
     mounts: tuple[RuntimeMount, ...] = ()
     privileged: bool = False
     pid_namespace: RuntimePidNamespace = RuntimePidNamespace.ISOLATED
