@@ -80,7 +80,6 @@ class RunService:
                 )
                 permissions = PermissionSet(
                     principal_id=agent.principal_id,
-                    initiator_principal_id=initiator_id,
                     project_id=project_id,
                     permissions=(
                         agent_permissions.permissions
@@ -126,6 +125,7 @@ class RunService:
                     run_id=run_id,
                     agent_id=agent_id,
                     principal_id=agent.principal_id,
+                    initiator_principal_id=initiator_id,
                     project_id=project_id,
                     base_ref=base_ref,
                     writable=writable,
