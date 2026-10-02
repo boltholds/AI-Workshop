@@ -158,3 +158,24 @@ def test_zero_ttl_is_rejected_instead_of_using_default(tmp_path: Path):
             scopes=frozenset({"mcp.call"}),
             ttl=timedelta(0),
         )
+
+
+def test_service_token_cannot_authenticate_unscoped_interactive_route(tmp_path: Path):
+    from ai_workshop.authn.tokens import WorkshopTokenAuthenticator
+
+    sessions = FakeSessions()
+    service_tokens = store(tmp_path)
+    issued = service_tokens.issue(
+        principal_id="service-reader",
+        scopes=frozenset({"runs.read"}),
+    )
+    auth = WorkshopTokenAuthenticator(
+        sessions=sessions,
+        service_tokens=service_tokens,
+    )
+
+    with pytest.raises(PermissionError, match="interactive"):
+        auth.authenticate(
+            issued.token,
+            required_scope=None,
+        )
