@@ -1,0 +1,87 @@
+services:
+  rootless-runtime:
+    image: docker@sha256:1f029db43a32fbb1465fe8ff4327d405154876946986170e97d7861232a8227a
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+      DOCKER_HOST: unix:///run/user/1000/docker.sock
+      XDG_RUNTIME_DIR: /run/user/1000
+    volumes:
+      - type: volume
+        source: server-runtime-data
+        target: /home/rootless/.local/share/docker
+      - type: volume
+        source: server-runtime-socket
+        target: /run/user
+      - type: volume
+        source: server-storage
+        target: /srv/ai-workshop
+    healthcheck:
+      test:
+        - CMD
+        - docker
+        - --host
+        - unix:///run/user/1000/docker.sock
+        - info
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+    networks:
+      - server-control
+
+  server-control:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    command:
+      - server
+      - serve
+      - --config
+      - /config/server.yaml
+      - --state-root
+      - /state
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8770"
+    depends_on:
+      rootless-runtime:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./config/server.example.yaml
+        target: /config/server.yaml
+        read_only: true
+      - type: volume
+        source: server-runtime-socket
+        target: /run/ai-workshop-runtime
+        read_only: true
+      - type: volume
+        source: server-storage
+        target: /srv/ai-workshop
+      - type: volume
+        source: server-state
+        target: /state
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8770/health', timeout=2)"
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - server-control
+
+volumes:
+  server-runtime-data:
+  server-runtime-socket:
+  server-storage:
+  server-state:
+
+networks:
+  server-control:
+    name: ai-workshop-server-control
