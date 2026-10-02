@@ -13,6 +13,8 @@ def build_server(
     service_controller=None,
     state_snapshot_service=None,
     reset_service=None,
+    server_recovery_registry=None,
+    server_recovery_registry=None,
     project_service=None,
     git_service=None,
     git_destructive_service=None,
@@ -136,6 +138,7 @@ def build_server(
         client,
         state_service=state_snapshot_service,
         reset_service=reset_service,
+        server_recovery_registry=server_recovery_registry,
     )
 
     if service_controller is not None:
@@ -183,6 +186,7 @@ def run_gateway(
         service_controller=service_controller,
         state_snapshot_service=state_snapshot_service,
         reset_service=reset_service,
+        server_recovery_registry=server_recovery_registry,
         project_service=project_service,
         git_service=git_service,
         git_destructive_service=git_destructive_service,
