@@ -16,6 +16,16 @@ from ai_workshop.server.rootless import (
 )
 
 
+class AllowPolicy:
+    def validate(self, spec: RuntimeWorkloadSpec) -> None:
+        return None
+
+
+class RejectPolicy:
+    def validate(self, spec: RuntimeWorkloadSpec) -> None:
+        raise ValueError("policy rejected")
+
+
 class CapturingExecutor:
     def __init__(self):
         self.calls: list[tuple[list[str], float]] = []
@@ -28,7 +38,7 @@ class CapturingExecutor:
 
 def controller():
     executor = CapturingExecutor()
-    return RootlessDockerController(executor=executor), executor
+    return RootlessDockerController(policy=AllowPolicy(), executor=executor), executor
 
 
 def test_create_uses_private_rootless_socket_and_fixed_argv():
@@ -123,3 +133,18 @@ def test_controller_does_not_expose_raw_docker_argument_parameters():
         parameters = inspect.signature(getattr(RootlessDockerController, method_name)).parameters
         forbidden = {"argv", "args", "options", "docker_args", "raw_args"}
         assert forbidden.isdisjoint(parameters)
+
+
+def test_create_validates_policy_before_runtime_execution():
+    executor = CapturingExecutor()
+    ctl = RootlessDockerController(policy=RejectPolicy(), executor=executor)
+
+    with pytest.raises(ValueError, match="policy rejected"):
+        ctl.create(
+            RuntimeWorkloadSpec(
+                workload_id="run-123",
+                image="python:3.12-slim",
+            )
+        )
+
+    assert executor.calls == []
