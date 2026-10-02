@@ -224,6 +224,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Enable nested rootless user namespaces
+        run: |
+          current_userns="$(sysctl -n kernel.unprivileged_userns_clone 2>/dev/null || true)"
+          if [ -n "$current_userns" ] && [ "$current_userns" != "1" ]; then
+            sudo sysctl -w kernel.unprivileged_userns_clone=1
+          fi
+          current_apparmor="$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true)"
+          if [ -n "$current_apparmor" ] && [ "$current_apparmor" != "0" ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          current_max="$(sysctl -n user.max_user_namespaces 2>/dev/null || true)"
+          if [ -n "$current_max" ] && [ "$current_max" -lt 28633 ]; then
+            sudo sysctl -w user.max_user_namespaces=28633
+          fi
       - name: Start autonomous Server Mode runtime
         run: |
           if ! docker compose -f compose.server.yaml up -d --build; then
