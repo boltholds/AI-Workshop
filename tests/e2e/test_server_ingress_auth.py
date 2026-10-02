@@ -27,11 +27,14 @@ def test_local_ca_certificate_completes_trusted_tls_handshake(tmp_path: Path):
     issued = ca.issue("workshop.local")
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    server.socket = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER).wrap_socket(
-        server.socket,
-        server_side=True,
+    server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    server_context.load_cert_chain(
         certfile=str(issued.certificate_path),
         keyfile=str(issued.private_key_path),
+    )
+    server.socket = server_context.wrap_socket(
+        server.socket,
+        server_side=True,
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
