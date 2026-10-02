@@ -256,16 +256,20 @@ def test_delete_branch_confirmation_rejects_target_ref_change(tmp_path: Path):
     project = git.clone("demo", str(remote))
     configure_user(project.path)
 
+    git.branch_create("demo", "other")
+    git.switch("demo", "other")
+    (project.path / "other.txt").write_text("other\n", encoding="utf-8")
+    git.add("demo", ["other.txt"])
+    git.commit("demo", "other commit")
+    git.switch("demo", "main")
+
     git.branch_create("demo", "delete-me")
     destructive = GitDestructiveService(git)
     preview = destructive.preview_delete_branch("demo", "delete-me")
     token = destructive.prepare(preview).token
 
-    run_git(project.path, "branch", "-f", "delete-me", "HEAD~0")
-    (project.path / "advance.txt").write_text("advance\n", encoding="utf-8")
-    git.add("demo", ["advance.txt"])
-    git.commit("demo", "advance current branch")
-    run_git(project.path, "branch", "-f", "delete-me", "HEAD")
+    run_git(project.path, "branch", "-f", "delete-me", "other")
+    assert git.status("demo").porcelain == ""
 
     with pytest.raises(PermissionError, match="changed since confirmation"):
         destructive.delete_branch("demo", "delete-me", token)
@@ -277,15 +281,45 @@ def test_hard_reset_confirmation_rejects_target_ref_change(tmp_path: Path):
     project = git.clone("demo", str(remote))
     configure_user(project.path)
 
+    git.branch_create("demo", "other")
+    git.switch("demo", "other")
+    (project.path / "other.txt").write_text("other\n", encoding="utf-8")
+    git.add("demo", ["other.txt"])
+    git.commit("demo", "other commit")
+    git.switch("demo", "main")
+
     git.branch_create("demo", "target")
     destructive = GitDestructiveService(git)
     preview = destructive.preview_hard_reset("demo", "target")
     token = destructive.prepare(preview).token
 
-    (project.path / "advance-target.txt").write_text("advance\n", encoding="utf-8")
-    git.add("demo", ["advance-target.txt"])
-    git.commit("demo", "advance")
-    run_git(project.path, "branch", "-f", "target", "HEAD")
+    run_git(project.path, "branch", "-f", "target", "other")
+    assert git.status("demo").porcelain == ""
 
     with pytest.raises(PermissionError, match="changed since confirmation"):
         destructive.hard_reset("demo", "target", token)
+
+
+def test_delete_tag_confirmation_rejects_target_ref_change(tmp_path: Path):
+    remote, _ = init_remote(tmp_path)
+    git, _ = service(tmp_path)
+    project = git.clone("demo", str(remote))
+    configure_user(project.path)
+
+    git.branch_create("demo", "other")
+    git.switch("demo", "other")
+    (project.path / "other-tag.txt").write_text("other\n", encoding="utf-8")
+    git.add("demo", ["other-tag.txt"])
+    git.commit("demo", "other tag commit")
+    git.switch("demo", "main")
+
+    git.tag("demo", "delete-tag")
+    destructive = GitDestructiveService(git)
+    preview = destructive.preview_delete_tag("demo", "delete-tag")
+    token = destructive.prepare(preview).token
+
+    run_git(project.path, "tag", "-f", "delete-tag", "other")
+    assert git.status("demo").porcelain == ""
+
+    with pytest.raises(PermissionError, match="changed since confirmation"):
+        destructive.delete_tag("demo", "delete-tag", token)
