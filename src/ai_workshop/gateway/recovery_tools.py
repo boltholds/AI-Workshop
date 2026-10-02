@@ -17,35 +17,36 @@ def register_recovery_tools(
         except GatewayError as exc:
             raise RuntimeError(f"{exc.code}: {exc.message}") from None
 
-    @server.tool()
-    def workspace_snapshot_create(project_id: str) -> dict[str, object]:
-        return workspace_safe(workspace_client.snapshot_create, project_id)
+    if workspace_client is not None:
+        @server.tool()
+        def workspace_snapshot_create(project_id: str) -> dict[str, object]:
+            return workspace_safe(workspace_client.snapshot_create, project_id)
 
-    @server.tool()
-    def workspace_snapshot_preview_restore(snapshot_id: str) -> dict[str, object]:
-        return workspace_safe(workspace_client.snapshot_preview_restore, snapshot_id)
+        @server.tool()
+        def workspace_snapshot_preview_restore(snapshot_id: str) -> dict[str, object]:
+            return workspace_safe(workspace_client.snapshot_preview_restore, snapshot_id)
 
-    @server.tool()
-    def workspace_snapshot_prepare_restore(
-        snapshot_id: str,
-        ttl_seconds: float = 300.0,
-    ) -> dict[str, object]:
-        return workspace_safe(
-            workspace_client.snapshot_prepare_restore,
-            snapshot_id,
-            ttl_seconds,
-        )
+        @server.tool()
+        def workspace_snapshot_prepare_restore(
+            snapshot_id: str,
+            ttl_seconds: float = 300.0,
+        ) -> dict[str, object]:
+            return workspace_safe(
+                workspace_client.snapshot_prepare_restore,
+                snapshot_id,
+                ttl_seconds,
+            )
 
-    @server.tool()
-    def workspace_snapshot_restore(
-        snapshot_id: str,
-        confirmation_token: str,
-    ) -> dict[str, object]:
-        return workspace_safe(
-            workspace_client.snapshot_restore,
-            snapshot_id,
-            confirmation_token,
-        )
+        @server.tool()
+        def workspace_snapshot_restore(
+            snapshot_id: str,
+            confirmation_token: str,
+        ) -> dict[str, object]:
+            return workspace_safe(
+                workspace_client.snapshot_restore,
+                snapshot_id,
+                confirmation_token,
+            )
 
     if state_service is not None:
         def state_safe(callable_, *args, **kwargs):
