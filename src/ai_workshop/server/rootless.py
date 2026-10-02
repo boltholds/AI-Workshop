@@ -11,9 +11,9 @@ from ai_workshop.server.models import (
     RuntimeWorkloadState,
     RuntimeWorkloadStatus,
 )
-
-
-DEFAULT_RUNTIME_SOCKET = "/run/ai-workshop-runtime/docker.sock"
+from ai_workshop.server.network import RuntimeNetworkPolicyProtocol
+from ai_workshop.server.policy import RuntimeWorkloadPolicy
+from ai_workshop.server.runtime import DEFAULT_RUNTIME_SOCKET
 
 
 @dataclass(frozen=True, slots=True)
