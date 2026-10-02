@@ -60,6 +60,21 @@ class PrincipalStore:
         with self._lock:
             return list(self._principals.values())
 
+    def find_external(
+        self,
+        provider_id: str,
+        subject: str,
+    ) -> ExternalIdentityPrincipal | None:
+        with self._lock:
+            for principal in self._principals.values():
+                if (
+                    isinstance(principal, ExternalIdentityPrincipal)
+                    and principal.provider_id == provider_id
+                    and principal.subject == subject
+                ):
+                    return principal
+            return None
+
     def remove_unreferenced(self, principal_id: str) -> None:
         with self._lock:
             self.get(principal_id)
