@@ -20,9 +20,15 @@ class RunServiceProtocol(Protocol):
         base_ref: str,
         writable: bool,
         limits: RunResourceLimits = RunResourceLimits(),
+        initiator_principal_id: str | None = None,
     ) -> AgentRun: ...
 
-    def stop(self, run_id: str) -> AgentRun: ...
+    def stop(
+        self,
+        run_id: str,
+        *,
+        initiator_principal_id: str | None = None,
+    ) -> AgentRun: ...
 
     def status(self, run_id: str) -> AgentRun: ...
 
