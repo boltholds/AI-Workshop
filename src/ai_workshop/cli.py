@@ -71,6 +71,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(os.getenv("AI_WORKSHOP_PROJECTS", "config/projects.local.yaml")),
     )
 
+    server = commands.add_parser("server")
+    server_commands = server.add_subparsers(dest="server_command", required=True)
+
+    server_serve = server_commands.add_parser("serve")
+    server_serve.add_argument("--config", type=Path, required=True)
+    server_serve.add_argument("--state-root", type=Path, default=Path("/state"))
+    server_serve.add_argument("--host", default="0.0.0.0")
+    server_serve.add_argument("--port", type=int, default=8770)
+
+    server_doctor = server_commands.add_parser("doctor")
+    server_doctor.add_argument("--config", type=Path, required=True)
+    server_doctor.add_argument("--state-root", type=Path, default=Path("/state"))
+
     browser = commands.add_parser("browser")
     browser.add_argument("--profile", type=Path, default=Path("/data/browser-profile"))
     browser.add_argument("--artifacts", type=Path, default=Path("/data/artifacts"))
@@ -179,6 +192,42 @@ def main(argv: list[str] | None = None) -> int:
             reset_service=reset_service,
         )
         return 0
+    if args.command == "server":
+        import json
+        from dataclasses import asdict
+
+        from ai_workshop.server.config import ServerModeConfig
+
+        config = ServerModeConfig.load(args.config)
+        if args.server_command == "serve":
+            import uvicorn
+            from ai_workshop.server.app import create_server_app
+
+            uvicorn.run(
+                create_server_app(
+                    config,
+                    state_root=args.state_root,
+                ),
+                host=args.host,
+                port=args.port,
+            )
+            return 0
+
+        if args.server_command == "doctor":
+            from ai_workshop.server.doctor import build_server_doctor
+
+            report = build_server_doctor(config).run()
+            print(json.dumps(
+                {
+                    "healthy": report.healthy,
+                    "exit_code": report.exit_code,
+                    "checks": [asdict(item) for item in report.checks],
+                },
+                indent=2,
+                sort_keys=True,
+            ))
+            return report.exit_code
+
     if args.command == "doctor":
         import json
         from dataclasses import asdict
