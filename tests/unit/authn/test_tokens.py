@@ -147,3 +147,14 @@ def test_combined_authenticator_enforces_scope_for_service_token(tmp_path: Path)
             issued.token,
             required_scope="mcp.call",
         )
+
+
+def test_zero_ttl_is_rejected_instead_of_using_default(tmp_path: Path):
+    tokens = store(tmp_path)
+
+    with pytest.raises(ValueError, match="TTL"):
+        tokens.issue(
+            principal_id="service-deploy",
+            scopes=frozenset({"mcp.call"}),
+            ttl=timedelta(0),
+        )
