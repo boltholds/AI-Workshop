@@ -372,3 +372,41 @@ def test_run_start_audit_failure_rolls_back_persisted_run(tmp_path: Path):
         runtime_image="ai-workshop-agent:server",
     )
     assert reloaded.list() == []
+
+
+def test_run_status_marks_run_failed_when_runtime_exited(tmp_path: Path):
+    service, _, _, runtime, _, _, _ = configured(tmp_path)
+    service.start(
+        "run-one",
+        agent_id="agent-titan",
+        project_id="project-alpha",
+        base_ref="main",
+        writable=False,
+    )
+    runtime.status = lambda workload_id: RuntimeWorkloadStatus(
+        workload_id=workload_id,
+        state=RuntimeWorkloadState.EXITED,
+    )
+
+    run = service.status("run-one")
+
+    assert run.state is RunState.FAILED
+
+
+def test_run_list_reconciles_running_runtime_state(tmp_path: Path):
+    service, _, _, runtime, _, _, _ = configured(tmp_path)
+    service.start(
+        "run-one",
+        agent_id="agent-titan",
+        project_id="project-alpha",
+        base_ref="main",
+        writable=False,
+    )
+    runtime.status = lambda workload_id: RuntimeWorkloadStatus(
+        workload_id=workload_id,
+        state=RuntimeWorkloadState.STOPPED,
+    )
+
+    runs = service.list()
+
+    assert runs[0].state is RunState.FAILED
