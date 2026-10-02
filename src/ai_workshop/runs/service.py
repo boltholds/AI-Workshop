@@ -99,6 +99,7 @@ class RunService:
             )
             created = False
             started = False
+            state_persisted = False
             try:
                 spec = RuntimeWorkloadSpec(
                     workload_id=run_id,
@@ -136,6 +137,7 @@ class RunService:
                 )
                 self._runs[run_id] = run
                 self._persist()
+                state_persisted = True
                 self.audit.record(
                     AuditEvent(
                         actor_principal_id=initiator_id,
@@ -148,8 +150,14 @@ class RunService:
                     )
                 )
                 return run
-            except Exception:
+            except Exception as exc:
                 self._runs.pop(run_id, None)
+                rollback_persist_error: Exception | None = None
+                if state_persisted:
+                    try:
+                        self._persist()
+                    except Exception as rollback_exc:
+                        rollback_persist_error = rollback_exc
                 if started:
                     try:
                         self.runtime.stop(run_id)
@@ -160,8 +168,15 @@ class RunService:
                         self.runtime.remove(run_id)
                     except Exception:
                         pass
-                self.workspaces.remove(run_id)
-                raise
+                try:
+                    self.workspaces.remove(run_id)
+                except Exception:
+                    pass
+                if rollback_persist_error is not None:
+                    raise RuntimeError(
+                        "run rollback state persistence failed"
+                    ) from rollback_persist_error
+                raise exc
 
     def stop(
         self,
