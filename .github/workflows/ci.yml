@@ -21,8 +21,8 @@ jobs:
       - name: Validate bootstrap script syntax
         shell: bash
         run: |
-          bash -n scripts/bootstrap.sh scripts/tunnel.sh
-          pwsh -NoProfile -Command '$files=@("scripts/bootstrap.ps1","scripts/tunnel.ps1"); foreach($file in $files){$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors) | Out-Null; if($errors.Count -gt 0){$errors | Format-List | Out-String | Write-Error; exit 1}}'
+          bash -n scripts/bootstrap.sh scripts/tunnel.sh scripts/server-bootstrap.sh
+          pwsh -NoProfile -Command '$files=@("scripts/bootstrap.ps1","scripts/tunnel.ps1","scripts/server-bootstrap.ps1"); foreach($file in $files){$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors) | Out-Null; if($errors.Count -gt 0){$errors | Format-List | Out-String | Write-Error; exit 1}}'
 
   docker-smoke:
     runs-on: ubuntu-latest
@@ -292,3 +292,25 @@ jobs:
       - name: Stop autonomous Server Mode runtime
         if: always()
         run: docker compose -f compose.server.yaml down -v
+
+
+  final-server-mode-acceptance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install
+        run: uv sync
+      - name: Validate final deployment manifest
+        run: |
+          docker compose -f deploy/server/compose.yaml config >/tmp/final-server-compose.yaml
+          ! grep -R "/var/run/docker.sock" deploy/server
+      - name: Run final Server Mode acceptance
+        run: |
+          uv run pytest tests/integration/server/test_bootstrap.py -v
+          uv run pytest tests/e2e/test_server_restart.py tests/e2e/test_full_server_mode.py -v
+          uv run pytest tests/unit/server/test_offline_profile.py -v
+      - name: Scan deployment trust boundaries
+        run: |
+          ! grep -R -E "(/root/\.ssh|/home/[^ ]+/\.ssh|/var/run/docker.sock)" deploy/server
+          test "$(grep -R "server-runtime-socket" deploy/server/compose.yaml | wc -l)" -le 2
