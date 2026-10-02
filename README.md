@@ -82,3 +82,8 @@ bash scripts/bootstrap.sh --project /path/to/MyProject
 The bootstrap preserves existing local secrets/configuration, starts the workspace and browser, starts the host-side MCP gateway, and finishes with ai-workshop doctor.
 
 To connect the private localhost MCP endpoint to ChatGPT without publishing it to the internet, use Secure MCP Tunnel. See docs/chatgpt-setup.md.
+
+
+## Server Mode forge integrations
+
+Server Mode supports provider-neutral GitHub, GitLab, and Forgejo hosting operations, with an optional embedded Forgejo profile. See [docs/server/forges.md](docs/server/forges.md) for profile, credential, binding, ingress, and persistence details.
