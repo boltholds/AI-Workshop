@@ -109,3 +109,22 @@ def test_runtime_network_policy_api_accepts_workload_not_network_names():
         RuntimeNetworkPolicy.allowed_networks
     ).parameters
     assert list(parameters) == ["self", "workload"]
+
+
+def test_private_network_grant_is_internal_and_egress_is_not():
+    policy = RuntimeNetworkPolicy(
+        allowed_outbound_kinds=frozenset({RuntimeWorkloadKind.AGENT_RUN}),
+    )
+    grants = policy.allowed_networks(
+        RuntimeWorkloadSpec(
+            workload_id="run-1",
+            image="python:3.12-slim",
+            kind=RuntimeWorkloadKind.AGENT_RUN,
+            outbound=RuntimeOutboundAccess.INTERNET,
+        )
+    )
+
+    private = next(item for item in grants if item.purpose is NetworkGrantPurpose.PRIVATE)
+    egress = next(item for item in grants if item.purpose is NetworkGrantPurpose.EGRESS)
+    assert private.internal is True
+    assert egress.internal is False
