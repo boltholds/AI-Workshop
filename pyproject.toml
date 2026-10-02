@@ -19,6 +19,7 @@ dependencies = [
   "pydantic>=2,<3",
   "PyYAML>=6,<7",
   "uvicorn>=0.35,<1",
+  "webauthn>=3,<4",
 ]
 
 [dependency-groups]
