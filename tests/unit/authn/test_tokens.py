@@ -97,3 +97,53 @@ def test_token_scope_set_must_be_nonempty(tmp_path: Path):
             principal_id="service-deploy",
             scopes=frozenset(),
         )
+
+
+class FakeSessions:
+    def __init__(self):
+        self.valid = {}
+
+    def authenticate(self, token: str) -> str:
+        if token not in self.valid:
+            raise PermissionError("invalid session")
+        return self.valid[token]
+
+
+def test_combined_authenticator_accepts_interactive_session_without_service_scope(
+    tmp_path: Path,
+):
+    from ai_workshop.authn.tokens import WorkshopTokenAuthenticator
+
+    sessions = FakeSessions()
+    sessions.valid["session-token"] = "user-admin"
+    service_tokens = store(tmp_path)
+    auth = WorkshopTokenAuthenticator(
+        sessions=sessions,
+        service_tokens=service_tokens,
+    )
+
+    assert auth.authenticate(
+        "session-token",
+        required_scope="mcp.call",
+    ) == "user-admin"
+
+
+def test_combined_authenticator_enforces_scope_for_service_token(tmp_path: Path):
+    from ai_workshop.authn.tokens import WorkshopTokenAuthenticator
+
+    sessions = FakeSessions()
+    service_tokens = store(tmp_path)
+    issued = service_tokens.issue(
+        principal_id="service-reader",
+        scopes=frozenset({"runs.read"}),
+    )
+    auth = WorkshopTokenAuthenticator(
+        sessions=sessions,
+        service_tokens=service_tokens,
+    )
+
+    with pytest.raises(PermissionError, match="scope"):
+        auth.authenticate(
+            issued.token,
+            required_scope="mcp.call",
+        )
