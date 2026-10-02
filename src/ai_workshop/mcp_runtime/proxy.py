@@ -37,9 +37,11 @@ class McpProxyService:
         self,
         registry: McpRegistry,
         clients: DownstreamClientResolver,
+        permissions=None,
     ):
         self.registry = registry
         self.clients = clients
+        self.permissions = permissions
 
     def servers_list(self, principal_id: str) -> list[McpServerRecord]:
         return self.registry.list()
@@ -62,8 +64,16 @@ class McpProxyService:
         arguments: Mapping[str, object],
     ) -> dict[str, object]:
         record = self._running(server_id)
-        if tool_name not in {item.name for item in record.capabilities.tools}:
+        tools = {item.name: item for item in record.capabilities.tools}
+        tool = tools.get(tool_name)
+        if tool is None:
             raise KeyError(f"unknown downstream MCP tool: {tool_name}")
+        if self.permissions is not None:
+            self.permissions.require(
+                principal_id,
+                record.registration,
+                tool.required_permissions,
+            )
         return self.clients.client_for(server_id).call_tool(tool_name, arguments)
 
     def resources_list(
