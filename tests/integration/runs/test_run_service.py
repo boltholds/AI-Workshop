@@ -40,13 +40,14 @@ class FakeWorkspaces:
 
 class FakeRuntime:
     def __init__(self):
+        self.ensured_images: list[str] = []
         self.created = []
         self.started: list[str] = []
         self.stopped: list[str] = []
         self.removed: list[str] = []
 
     def ensure_image(self, image: str) -> None:
-        pass
+        self.ensured_images.append(image)
 
     def create(self, spec):
         self.created.append(spec)
@@ -163,8 +164,11 @@ def test_run_start_captures_permissions_and_mounts_only_run_workspace(tmp_path: 
     )
     assert workspaces.created == [("project-alpha", "run-one", "main", True)]
     spec = runtime.created[0]
+    assert runtime.ensured_images == ["ai-workshop-agent:server"]
     assert spec.workload_id == "run-one"
     assert spec.image == "ai-workshop-agent:server"
+    assert spec.entrypoint is None
+    assert spec.command == ("run-host",)
     assert spec.cpu_limit == 2.0
     assert spec.memory_limit_mb == 2048
     assert len(spec.mounts) == 1
@@ -368,3 +372,41 @@ def test_run_start_audit_failure_rolls_back_persisted_run(tmp_path: Path):
         runtime_image="ai-workshop-agent:server",
     )
     assert reloaded.list() == []
+
+
+def test_run_status_marks_run_failed_when_runtime_exited(tmp_path: Path):
+    service, _, _, runtime, _, _, _ = configured(tmp_path)
+    service.start(
+        "run-one",
+        agent_id="agent-titan",
+        project_id="project-alpha",
+        base_ref="main",
+        writable=False,
+    )
+    runtime.status = lambda workload_id: RuntimeWorkloadStatus(
+        workload_id=workload_id,
+        state=RuntimeWorkloadState.EXITED,
+    )
+
+    run = service.status("run-one")
+
+    assert run.state is RunState.FAILED
+
+
+def test_run_list_reconciles_running_runtime_state(tmp_path: Path):
+    service, _, _, runtime, _, _, _ = configured(tmp_path)
+    service.start(
+        "run-one",
+        agent_id="agent-titan",
+        project_id="project-alpha",
+        base_ref="main",
+        writable=False,
+    )
+    runtime.status = lambda workload_id: RuntimeWorkloadStatus(
+        workload_id=workload_id,
+        state=RuntimeWorkloadState.STOPPED,
+    )
+
+    runs = service.list()
+
+    assert runs[0].state is RunState.FAILED
