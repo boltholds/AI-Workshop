@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 _ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]*$"
@@ -72,12 +72,6 @@ class RoleDefinition(_FrozenModel):
             if re.fullmatch(_PERMISSION_PATTERN, value) is None:
                 raise ValueError("invalid permission")
         return values
-
-    @model_validator(mode="after")
-    def allow_and_deny_do_not_overlap(self) -> "RoleDefinition":
-        if set(self.allow) & set(self.deny):
-            raise ValueError("permission cannot be both allowed and denied")
-        return self
 
 
 class GlobalRoleGrant(_FrozenModel):
