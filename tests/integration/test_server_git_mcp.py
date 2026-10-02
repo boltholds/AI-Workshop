@@ -184,3 +184,92 @@ def test_build_server_keeps_desktop_git_proxy_by_default():
     assert "git_status" in names
     assert "git_diff" in names
     assert "git_clone" not in names
+
+
+class FakeConfirmation:
+    def __init__(self, token="confirmation-token"):
+        self.token = token
+
+    def model_dump(self, *args, **kwargs):
+        return {"token": self.token, "preview_digest": "digest", "expires_at": 123.0}
+
+
+class FakePreview:
+    def __init__(self, operation):
+        self.operation = operation
+
+    def model_dump(self, *args, **kwargs):
+        return {
+            "operation": self.operation,
+            "project_id": "demo",
+            "target": "target",
+            "remote": "",
+            "current_head": "a" * 40,
+            "current_status": "",
+            "digest": "digest",
+        }
+
+
+class FakeDestructiveService:
+    def preview_delete_branch(self, project_id, branch):
+        return FakePreview("delete-branch")
+
+    def preview_delete_tag(self, project_id, tag):
+        return FakePreview("delete-tag")
+
+    def prepare(self, preview, *, ttl_seconds=300.0):
+        return FakeConfirmation()
+
+    def delete_branch(self, project_id, branch, confirmation_token):
+        assert confirmation_token == "confirmation-token"
+        return type("Result", (), {"model_dump": lambda self, *args, **kwargs: {
+            "operation": "delete-branch", "project_id": project_id, "completed": True,
+        }})()
+
+    def delete_tag(self, project_id, tag, confirmation_token):
+        assert confirmation_token == "confirmation-token"
+        return type("Result", (), {"model_dump": lambda self, *args, **kwargs: {
+            "operation": "delete-tag", "project_id": project_id, "completed": True,
+        }})()
+
+
+def test_destructive_git_tools_include_confirmed_branch_and_tag_deletion():
+    server = FakeServer()
+    register_git_tools(
+        server,
+        FakeGit(),
+        destructive=FakeDestructiveService(),
+    )
+
+    expected = {
+        "git_delete_branch_preview",
+        "git_delete_branch_prepare",
+        "git_delete_branch",
+        "git_delete_tag_preview",
+        "git_delete_tag_prepare",
+        "git_delete_tag",
+    }
+    assert expected <= set(server.tools)
+
+    branch = server.tools["git_delete_branch"](
+        "demo", "feature-old", "confirmation-token"
+    )
+    tag = server.tools["git_delete_tag"](
+        "demo", "v0-old", "confirmation-token"
+    )
+    assert branch["completed"] is True
+    assert tag["completed"] is True
+
+
+def test_destructive_delete_tools_have_no_boolean_confirm_shortcut():
+    server = FakeServer()
+    register_git_tools(
+        server,
+        FakeGit(),
+        destructive=FakeDestructiveService(),
+    )
+
+    for name in ("git_delete_branch", "git_delete_tag"):
+        parameters = inspect.signature(server.tools[name]).parameters
+        assert "confirmation_token" in parameters
+        assert "confirm" not in parameters
