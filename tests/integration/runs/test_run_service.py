@@ -298,3 +298,29 @@ def test_duplicate_run_id_is_rejected(tmp_path: Path):
             base_ref="main",
             writable=False,
         )
+
+
+def test_initiator_cannot_start_agent_above_own_project_permissions(tmp_path: Path):
+    service, principals, _, runtime, workspaces, _, _ = configured(tmp_path)
+    principals.create(UserPrincipal(principal_id="user-viewer", display_name="Viewer"))
+    principals.grant_global_role("user-viewer", "ceiling")
+    principals.set_project_membership(
+        ProjectMembership(
+            principal_id="user-viewer",
+            project_id="project-alpha",
+            role_ids=("viewer",),
+        )
+    )
+
+    with pytest.raises(PermissionError, match="filesystem.write"):
+        service.start(
+            "run-escalation",
+            agent_id="agent-titan",
+            project_id="project-alpha",
+            base_ref="main",
+            writable=True,
+            initiator_principal_id="user-viewer",
+        )
+
+    assert runtime.created == []
+    assert workspaces.created == []
