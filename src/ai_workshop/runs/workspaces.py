@@ -91,6 +91,7 @@ class RunWorkspaceManager:
                         "version": 1,
                         "run_id": run_id,
                         "project_id": project_id,
+                        "project_path": str(project.path),
                         "path": str(workspace_path),
                         "base_ref": base_ref,
                         "commit_id": commit_id,
@@ -144,21 +145,33 @@ class RunWorkspaceManager:
         except KeyError:
             return
 
-        project = self.projects.get(workspace.project_id)
-        if not isinstance(project, GitManagedProject):
-            raise ValueError("run workspace project is no longer Git-managed")
-
-        self._git(
-            project.path,
-            "worktree",
-            "remove",
-            "--force",
-            str(workspace.path),
-            check=False,
+        marker_path = self.storage.run_root(run_id) / "workspace.json"
+        payload = json.loads(marker_path.read_text(encoding="utf-8"))
+        project_path = Path(
+            payload.get(
+                "project_path",
+                self.storage.projects_root / workspace.project_id,
+            )
         )
+        expected_project_path = (
+            self.storage.projects_root / workspace.project_id
+        ).resolve(strict=False)
+        if project_path.resolve(strict=False) != expected_project_path:
+            raise ValueError("run workspace project path escapes project storage")
+
+        if project_path.is_dir():
+            self._git(
+                project_path,
+                "worktree",
+                "remove",
+                "--force",
+                str(workspace.path),
+                check=False,
+            )
         shutil.rmtree(workspace.path, ignore_errors=True)
-        (self.storage.run_root(run_id) / "workspace.json").unlink(missing_ok=True)
-        self._git(project.path, "worktree", "prune", check=False)
+        marker_path.unlink(missing_ok=True)
+        if project_path.is_dir():
+            self._git(project_path, "worktree", "prune", check=False)
 
     def _git(
         self,
