@@ -197,7 +197,18 @@ unset BROWSER_TOKEN
 
 For the initial deployment, keep `AI_WORKSHOP_HTTPS_BIND` on loopback. Do not expose it to the LAN or Internet until authentication/TLS routing for the intended hostname has been configured and verified.
 
-The current Compose file consumes `AI_WORKSHOP_BROWSER_TOKEN` from the environment. Bootstrap-generated token files are not automatically imported into Compose, so this step is required.
+The current Compose file consumes `AI_WORKSHOP_BROWSER_TOKEN` through Compose interpolation. Because `deploy/server/.env` sits next to the Compose file, supported Compose implementations load it as the project `.env` automatically when no explicit `--env-file` is supplied. Bootstrap-generated token files are not automatically imported into Compose, so creating this `.env` file is still required.
+
+If your Compose implementation does not load the adjacent project `.env`, export it into the shell explicitly before running Compose:
+
+```bash
+set -a
+. deploy/server/.env
+set +a
+docker compose -f deploy/server/compose.yaml up -d --build
+```
+
+You can inspect the installed implementation with `docker compose version`. Modern Docker Compose supports `--env-file`, but the zero-to-running path intentionally does not require that option.
 
 ## 8. Review the Server Mode configuration
 
@@ -223,7 +234,6 @@ Validate the complete Compose model before starting anything:
 ```bash
 cd /opt/ai-workshop
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   config > /tmp/ai-workshop-server-compose.yaml
 ```
@@ -260,7 +270,6 @@ From the repository root:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   up -d --build
 ```
@@ -269,7 +278,6 @@ Check status:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   ps
 ```
@@ -282,7 +290,6 @@ If a service does not become healthy:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   logs --tail=200
 ```
@@ -304,7 +311,6 @@ The control plane contains the operator doctor command:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   exec -T server-control \
   ai-workshop server doctor \
@@ -366,7 +372,6 @@ Restart the outer services without deleting volumes:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   restart
 ```
@@ -415,7 +420,6 @@ Then recreate the ingress service:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   up -d ingress
 ```
@@ -451,12 +455,10 @@ At minimum:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   pull --ignore-buildable
 
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   build
 ```
@@ -568,7 +570,6 @@ Validate Compose:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   config >/dev/null
 ```
@@ -577,7 +578,6 @@ Rebuild/recreate without deleting named volumes:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   up -d --build
 ```
@@ -590,7 +590,6 @@ Stop services while preserving all named volumes:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   stop
 ```
@@ -599,7 +598,6 @@ Start them again:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   start
 ```
@@ -608,12 +606,10 @@ Recreate containers while preserving volumes:
 
 ```bash
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   down
 
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   up -d
 ```
@@ -697,17 +693,14 @@ chmod 600 deploy/server/.env
 unset BROWSER_TOKEN
 
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   config >/dev/null
 
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   up -d --build
 
 docker compose \
-  --env-file deploy/server/.env \
   -f deploy/server/compose.yaml \
   exec -T server-control \
   ai-workshop server doctor \
