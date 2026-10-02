@@ -56,7 +56,11 @@ def service(tmp_path: Path) -> tuple[GitRepositoryService, ProjectStore]:
         secret_root=tmp_path / "secrets",
         forbidden_roots=(storage.root,),
     )
-    return GitRepositoryService(projects, credentials), projects
+    return GitRepositoryService(
+        projects,
+        credentials,
+        allowed_local_remote_roots=(tmp_path,),
+    ), projects
 
 
 def test_clone_status_commit_and_log_against_local_bare_remote(tmp_path: Path):
