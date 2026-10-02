@@ -86,3 +86,44 @@ def test_server_control_image_installs_git_and_ssh_client():
     assert "apt-get install" in dockerfile
     assert "git" in dockerfile
     assert "openssh-client" in dockerfile
+
+
+def test_final_server_deployment_contains_required_outer_services():
+    compose = load_yaml("deploy/server/compose.yaml")
+    services = compose["services"]
+    assert {"rootless-runtime", "server-control", "browser", "ingress"} <= set(services)
+
+
+def test_final_server_deployment_never_mounts_host_docker_socket():
+    text = (ROOT / "deploy/server/compose.yaml").read_text(encoding="utf-8")
+    assert "/var/run/docker.sock" not in text
+
+
+def test_final_server_deployment_only_ingress_publishes_host_port():
+    compose = load_yaml("deploy/server/compose.yaml")
+    services = compose["services"]
+    published = {name for name, spec in services.items() if spec.get("ports")}
+    assert published == {"ingress"}
+
+
+def test_final_server_deployment_runtime_socket_is_control_plane_only():
+    compose = load_yaml("deploy/server/compose.yaml")
+    consumers = set()
+    for name, service in compose["services"].items():
+        for volume in service.get("volumes", []):
+            if "server-runtime-socket" in str(volume):
+                consumers.add(name)
+    assert consumers == {"rootless-runtime", "server-control"}
+
+
+def test_final_server_deployment_persists_required_domains():
+    compose = load_yaml("deploy/server/compose.yaml")
+    volumes = set(compose["volumes"])
+    assert {
+        "server-runtime-data",
+        "server-storage",
+        "server-state",
+        "server-ca",
+        "browser-profile",
+        "browser-artifacts",
+    } <= volumes
