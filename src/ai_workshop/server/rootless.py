@@ -71,13 +71,16 @@ class RootlessDockerController:
     def __init__(
         self,
         *,
+        policy: RuntimeWorkloadPolicy,
         executor: RuntimeExecutor | None = None,
         timeout_seconds: float = 60.0,
     ):
+        self.policy = policy
         self.executor = executor or SubprocessRuntimeExecutor()
         self.timeout_seconds = timeout_seconds
 
     def create(self, spec: RuntimeWorkloadSpec) -> RuntimeWorkloadStatus:
+        self.policy.validate(spec)
         argv = self._base() + ["create", "--name", spec.workload_id]
         for variable in spec.environment:
             argv.extend(["--env", f"{variable.name}={variable.value}"])
