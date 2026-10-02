@@ -324,3 +324,47 @@ def test_initiator_cannot_start_agent_above_own_project_permissions(tmp_path: Pa
 
     assert runtime.created == []
     assert workspaces.created == []
+
+
+class FailingAudit:
+    def record(self, event) -> None:
+        raise OSError("audit unavailable")
+
+
+def test_run_start_audit_failure_rolls_back_persisted_run(tmp_path: Path):
+    service, principals, agents, runtime, workspaces, _, cleaner = configured(tmp_path)
+    failing = RunService(
+        agents=agents,
+        authorization=AuthorizationService(principals),
+        workspaces=workspaces,
+        runtime=runtime,
+        audit=FailingAudit(),
+        state_path=tmp_path / "audit-failure-runs.json",
+        runtime_image="ai-workshop-agent:server",
+        run_cleaners=(cleaner,),
+    )
+
+    with pytest.raises(OSError, match="audit unavailable"):
+        failing.start(
+            "run-audit-failure",
+            agent_id="agent-titan",
+            project_id="project-alpha",
+            base_ref="main",
+            writable=False,
+        )
+
+    assert failing.list() == []
+    assert runtime.stopped == ["run-audit-failure"]
+    assert runtime.removed == ["run-audit-failure"]
+    assert workspaces.removed == ["run-audit-failure"]
+
+    reloaded = RunService(
+        agents=agents,
+        authorization=AuthorizationService(principals),
+        workspaces=workspaces,
+        runtime=runtime,
+        audit=AuditStore(tmp_path / "reloaded-audit.jsonl"),
+        state_path=tmp_path / "audit-failure-runs.json",
+        runtime_image="ai-workshop-agent:server",
+    )
+    assert reloaded.list() == []
