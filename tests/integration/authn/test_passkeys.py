@@ -11,7 +11,7 @@ from ai_workshop.authn.models import (
     VerifiedRegistration,
 )
 from ai_workshop.authn.sessions import SessionStore
-from ai_workshop.authn.webauthn import WebAuthnService
+from ai_workshop.authn.webauthn import PyWebAuthnBackend, WebAuthnService
 from ai_workshop.authz.service import AuthorizationService
 from ai_workshop.identity.models import UserPrincipal
 from ai_workshop.identity.store import PrincipalStore
@@ -255,3 +255,51 @@ def test_authentication_state_survives_reload(tmp_path: Path):
     assert reloaded.credentials_for("admin-user")[0].credential_id_b64 == b64(
         FakeBackend.credential_id
     )
+
+
+def test_bootstrap_rolls_back_identity_when_auth_state_persist_fails(
+    tmp_path: Path,
+    monkeypatch,
+):
+    authn, principals, _, _ = services(tmp_path)
+    start = authn.begin_admin_bootstrap(
+        "admin-rollback",
+        display_name="Rollback",
+    )
+
+    def fail_persist() -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(authn, "_persist", fail_persist)
+
+    with pytest.raises(OSError, match="disk full"):
+        authn.finish_admin_bootstrap(
+            start.challenge_id,
+            {"challenge": start.challenge_b64},
+        )
+
+    with pytest.raises(KeyError, match="unknown principal"):
+        principals.get("admin-rollback")
+
+
+def test_real_webauthn_backend_generates_options_for_configured_rp():
+    import json
+
+    backend = PyWebAuthnBackend(
+        rp_id="workshop.local",
+        origin="https://workshop.local",
+        rp_name="AI Workshop",
+    )
+
+    payload = json.loads(
+        backend.registration_options(
+            user_id=b"user-handle-1234567890",
+            username="admin-user",
+            display_name="Admin",
+            challenge=b"challenge-1234567890",
+            exclude_credentials=(),
+        )
+    )
+
+    assert payload["rp"]["id"] == "workshop.local"
+    assert payload["user"]["name"] == "admin-user"
