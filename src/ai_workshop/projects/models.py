@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -38,6 +39,11 @@ class GitManagedProject(_ProjectBase):
     def remote_url_must_be_single_value(cls, value: str) -> str:
         if "\x00" in value or "\n" in value or "\r" in value:
             raise ValueError("remote URL contains invalid control characters")
+        parsed = urlsplit(value)
+        if parsed.password is not None:
+            raise ValueError("remote URL must not contain embedded credentials")
+        if parsed.scheme in {"http", "https"} and parsed.username is not None:
+            raise ValueError("HTTP remote URL must not contain embedded credentials")
         return value
 
 
