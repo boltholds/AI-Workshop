@@ -191,3 +191,18 @@ def test_clone_failure_rolls_back_project_registration(tmp_path: Path):
     with pytest.raises(KeyError):
         projects.get("broken")
     assert not (tmp_path / "server-storage" / "projects" / "broken").exists()
+
+
+def test_remote_set_rejects_http_remote_with_embedded_credentials(tmp_path: Path):
+    remote, _ = init_remote(tmp_path)
+    git, _ = service(tmp_path)
+    git.clone("demo", str(remote))
+
+    with pytest.raises(ValueError, match="credential"):
+        git.remote_set(
+            "demo",
+            "origin",
+            "https://user:super-secret@example.test/team/repo.git",
+        )
+
+    assert "super-secret" not in git.remote_list("demo")["origin"]
