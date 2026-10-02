@@ -15,7 +15,9 @@ jobs:
       - name: Install
         run: uv sync
       - name: Test
-        run: uv run pytest tests/unit tests/integration --ignore=tests/integration/browser -v
+        run: |
+          uv run pytest tests/unit tests/integration --ignore=tests/integration/browser -v
+          uv run pytest tests/e2e/test_server_ingress_auth.py -v
       - name: Validate bootstrap script syntax
         shell: bash
         run: |
