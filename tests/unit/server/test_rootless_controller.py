@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+import inspect
+
+import pytest
+
+from ai_workshop.server.models import (
+    RuntimeEnvironmentVariable,
+    RuntimeWorkloadSpec,
+    RuntimeWorkloadState,
+)
+from ai_workshop.server.rootless import (
+    DEFAULT_RUNTIME_SOCKET,
+    RootlessDockerController,
+    RuntimeCommandResult,
+)
+
+
+class CapturingExecutor:
+    def __init__(self):
+        self.calls: list[tuple[list[str], float]] = []
+        self.next = RuntimeCommandResult(exit_code=0, stdout="", stderr="")
+
+    def run(self, argv: list[str], *, timeout_seconds: float) -> RuntimeCommandResult:
+        self.calls.append((list(argv), timeout_seconds))
+        return self.next
+
+
+def controller():
+    executor = CapturingExecutor()
+    return RootlessDockerController(executor=executor), executor
+
+
+def test_create_uses_private_rootless_socket_and_fixed_argv():
+    ctl, executor = controller()
+    spec = RuntimeWorkloadSpec(
+        workload_id="run-123",
+        image="python:3.12-slim",
+        command=("python", "-V"),
+    )
+
+    status = ctl.create(spec)
+
+    argv, _ = executor.calls[-1]
+    assert argv == [
+        "docker",
+        "--host",
+        f"unix://{DEFAULT_RUNTIME_SOCKET}",
+        "create",
+        "--name",
+        "run-123",
+        "--",
+        "python:3.12-slim",
+        "python",
+        "-V",
+    ]
+    assert status.state is RuntimeWorkloadState.CREATED
+
+
+def test_environment_value_cannot_inject_docker_arguments():
+    ctl, executor = controller()
+    spec = RuntimeWorkloadSpec(
+        workload_id="run-123",
+        image="python:3.12-slim",
+        environment=(
+            RuntimeEnvironmentVariable(name="PAYLOAD", value="--privileged"),
+        ),
+    )
+
+    ctl.create(spec)
+
+    argv, _ = executor.calls[-1]
+    assert argv[argv.index("--env") + 1] == "PAYLOAD=--privileged"
+    assert argv.count("--privileged") == 0
+
+
+def test_runtime_models_reject_image_cli_fragment():
+    with pytest.raises(ValueError):
+        RuntimeWorkloadSpec(
+            workload_id="run-123",
+            image="--privileged",
+        )
+
+
+def test_controller_lifecycle_commands_are_fixed():
+    ctl, executor = controller()
+
+    ctl.start("run-123")
+    assert executor.calls[-1][0][-2:] == ["start", "run-123"]
+
+    ctl.stop("run-123")
+    assert executor.calls[-1][0][-2:] == ["stop", "run-123"]
+
+    ctl.remove("run-123")
+    assert executor.calls[-1][0][-3:] == ["rm", "--", "run-123"]
+
+
+def test_status_and_logs_use_bounded_commands():
+    ctl, executor = controller()
+    executor.next = RuntimeCommandResult(exit_code=0, stdout="running\n", stderr="")
+    status = ctl.status("run-123")
+    assert status.state is RuntimeWorkloadState.RUNNING
+    assert executor.calls[-1][0][-4:] == [
+        "--format",
+        "{{.State.Status}}",
+        "--",
+        "run-123",
+    ]
+
+    executor.next = RuntimeCommandResult(exit_code=0, stdout="line 1\n", stderr="")
+    assert ctl.logs("run-123", tail=25) == "line 1\n"
+    assert executor.calls[-1][0][-5:] == [
+        "logs",
+        "--tail",
+        "25",
+        "--",
+        "run-123",
+    ]
+
+
+def test_controller_does_not_expose_raw_docker_argument_parameters():
+    for method_name in ("create", "start", "stop", "remove", "status", "logs"):
+        parameters = inspect.signature(getattr(RootlessDockerController, method_name)).parameters
+        forbidden = {"argv", "args", "options", "docker_args", "raw_args"}
+        assert forbidden.isdisjoint(parameters)
