@@ -65,7 +65,7 @@ class ScopedTokenStore:
             if re.fullmatch(_SCOPE_PATTERN, scope) is None:
                 raise ValueError("invalid token scope")
 
-        lifetime = ttl or self.default_ttl
+        lifetime = self.default_ttl if ttl is None else ttl
         if lifetime <= timedelta(0):
             raise ValueError("token TTL must be positive")
 
