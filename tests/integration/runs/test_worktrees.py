@@ -119,3 +119,15 @@ def test_remove_unknown_run_is_idempotent(tmp_path: Path):
     manager = RunWorkspaceManager(projects, storage)
 
     manager.remove("missing")
+
+
+def test_remove_worktree_survives_project_deregistration(tmp_path: Path):
+    storage, projects, _ = fixture(tmp_path)
+    manager = RunWorkspaceManager(projects, storage)
+    workspace = manager.create("demo", "run-one", "main", writable=True)
+
+    projects.remove_registration("demo")
+    manager.remove("run-one")
+
+    assert not workspace.path.exists()
+    assert not (storage.run_root("run-one") / "workspace.json").exists()
