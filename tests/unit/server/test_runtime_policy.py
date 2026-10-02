@@ -140,3 +140,43 @@ def test_policy_rejects_duplicate_container_ports(tmp_path: Path):
                 container_ports=(8080, 8080),
             )
         )
+
+
+def test_agent_run_rejects_mount_from_other_server_storage(tmp_path: Path):
+    runtime_policy, storage = policy(tmp_path)
+    other_run = storage.resolve_run_path("run-2", "workspace")
+    other_run.mkdir(parents=True)
+
+    with pytest.raises(ValueError, match="assigned workload storage"):
+        runtime_policy.validate(
+            RuntimeWorkloadSpec(
+                workload_id="run-1",
+                image="python:3.12-slim",
+                mounts=(
+                    RuntimeMount(
+                        source=other_run,
+                        target=PurePosixPath("/workspace/project"),
+                    ),
+                ),
+            )
+        )
+
+
+def test_project_service_rejects_canonical_project_store_mount(tmp_path: Path):
+    runtime_policy, storage = policy(tmp_path)
+    project = storage.project_root("project-1")
+
+    with pytest.raises(ValueError, match="assigned workload storage"):
+        runtime_policy.validate(
+            RuntimeWorkloadSpec(
+                workload_id="service-1",
+                image="nginx:latest",
+                kind="project-service",
+                mounts=(
+                    RuntimeMount(
+                        source=project,
+                        target=PurePosixPath("/workspace/project"),
+                    ),
+                ),
+            )
+        )
