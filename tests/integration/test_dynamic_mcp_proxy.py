@@ -13,6 +13,11 @@ from ai_workshop.mcp_runtime.proxy import McpProxyService
 from ai_workshop.mcp_runtime.registry import McpRegistryStore
 
 
+class _Tool:
+    def __init__(self, name):
+        self.name = name
+
+
 class FakeServer:
     def __init__(self):
         self.tools = {}
@@ -24,6 +29,19 @@ class FakeServer:
             self.tools[name or fn.__name__] = fn
             return fn
         return decorate
+
+    async def list_tools(self):
+        return [_Tool(name) for name in self.tools]
+
+    def add_tool(self, fn, *, name, description=None):
+        if name in self.tools:
+            return
+        self.tools[name] = fn
+
+    def remove_tool(self, name):
+        if name not in self.tools:
+            raise KeyError(name)
+        self.tools.pop(name)
 
 
 class FakeResolver:
@@ -119,3 +137,46 @@ def test_new_downstream_tool_is_callable_without_upstream_restart(tmp_path):
         "tool": "search",
         "arguments": {"query": "PLC"},
     }
+
+
+def test_promotion_hot_adds_and_removes_upstream_tool(tmp_path):
+    import asyncio
+    from ai_workshop.mcp_runtime.promotion import McpPromotionRegistry
+
+    registry = McpRegistryStore(tmp_path / "mcp.json")
+    registry.register(_registration("docs"))
+    registry.update_capabilities(
+        "docs",
+        McpDiscoveredCapabilities(
+            server_id="docs",
+            revision=1,
+            tools=(McpToolDescriptor(name="search"),),
+        ),
+    )
+    proxy = McpProxyService(registry, FakeClients())
+    server = FakeServer()
+    promotions = McpPromotionRegistry()
+    register_mcp_runtime_tools(
+        server,
+        proxy,
+        FakeResolver(),
+        promotion_registry=promotions,
+    )
+
+    asyncio.run(
+        server.tools["mcp.promote"](
+            "docs",
+            "search",
+            "docs_search",
+        )
+    )
+
+    assert "docs_search" in server.tools
+    assert server.tools["docs_search"]({"query": "PLC"}) == {
+        "tool": "search",
+        "arguments": {"query": "PLC"},
+    }
+
+    asyncio.run(server.tools["mcp.unpromote"]("docs_search"))
+
+    assert "docs_search" not in server.tools
