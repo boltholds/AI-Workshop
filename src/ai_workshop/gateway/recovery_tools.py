@@ -9,6 +9,7 @@ def register_recovery_tools(
     *,
     state_service=None,
     reset_service=None,
+    server_recovery_registry=None,
 ) -> None:
     def workspace_safe(callable_, *args, **kwargs):
         try:
@@ -119,3 +120,100 @@ def register_recovery_tools(
                 plan,
                 confirmation_token,
             ).model_dump()
+
+
+    if server_recovery_registry is not None:
+        def server_recovery_safe(callable_, *args, **kwargs):
+            try:
+                return callable_(*args, **kwargs)
+            except (KeyError, ValueError, PermissionError) as exc:
+                raise RuntimeError(str(exc).strip("'")) from None
+            except RuntimeError:
+                raise
+            except Exception:
+                raise RuntimeError(
+                    "SERVER_RECOVERY_FAILED: server recovery operation failed"
+                ) from None
+
+        @server.tool()
+        def server_recovery_domains() -> list[str]:
+            return server_recovery_registry.list()
+
+        @server.tool()
+        def server_recovery_snapshot_preview(
+            domain_id: str,
+            target_id: str,
+        ) -> dict[str, object]:
+            domain = server_recovery_safe(
+                server_recovery_registry.require,
+                domain_id,
+            )
+            return server_recovery_safe(
+                domain.preview_snapshot,
+                target_id,
+            )
+
+        @server.tool()
+        def server_recovery_snapshot_create(
+            domain_id: str,
+            target_id: str,
+        ) -> dict[str, object]:
+            domain = server_recovery_safe(
+                server_recovery_registry.require,
+                domain_id,
+            )
+            return server_recovery_safe(
+                domain.snapshot,
+                target_id,
+            )
+
+        @server.tool()
+        def server_recovery_restore_preview(
+            domain_id: str,
+            snapshot_id: str,
+        ) -> dict[str, object]:
+            domain = server_recovery_safe(
+                server_recovery_registry.require,
+                domain_id,
+            )
+            return server_recovery_safe(
+                domain.preview_restore,
+                snapshot_id,
+            )
+
+        @server.tool()
+        def server_recovery_restore_prepare(
+            domain_id: str,
+            snapshot_id: str,
+            ttl_seconds: float = 300.0,
+        ) -> dict[str, object]:
+            domain = server_recovery_safe(
+                server_recovery_registry.require,
+                domain_id,
+            )
+            prepare = getattr(domain, "prepare_restore", None)
+            if prepare is None:
+                raise RuntimeError(
+                    "SERVER_RECOVERY_PREPARE_UNSUPPORTED"
+                )
+            return server_recovery_safe(
+                prepare,
+                snapshot_id,
+                ttl_seconds=ttl_seconds,
+            ).model_dump()
+
+        @server.tool()
+        def server_recovery_restore(
+            domain_id: str,
+            snapshot_id: str,
+            confirmation_token: str,
+        ) -> dict[str, object]:
+            domain = server_recovery_safe(
+                server_recovery_registry.require,
+                domain_id,
+            )
+            return server_recovery_safe(
+                domain.restore,
+                snapshot_id,
+                confirmation_token,
+            )
