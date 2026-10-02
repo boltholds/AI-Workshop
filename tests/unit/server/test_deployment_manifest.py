@@ -24,7 +24,8 @@ def test_server_manifest_has_rootless_runtime_and_persistent_storage():
     } <= set(volumes)
 
     image = services["rootless-runtime"]["image"]
-    assert image.startswith("docker@sha256:")
+    assert image.startswith("docker:")
+    assert "@sha256:" in image
     assert len(image.partition("@sha256:")[2]) == 64
 
 
