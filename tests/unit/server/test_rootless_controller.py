@@ -9,6 +9,7 @@ from ai_workshop.server.models import (
     RuntimeWorkloadSpec,
     RuntimeWorkloadState,
 )
+from ai_workshop.server.network import NetworkGrant, NetworkGrantPurpose
 from ai_workshop.server.rootless import (
     DEFAULT_RUNTIME_SOCKET,
     RootlessDockerController,
@@ -161,3 +162,32 @@ def test_create_validates_policy_before_runtime_execution():
         )
 
     assert executor.calls == []
+
+
+class PrivateNetworkPolicy:
+    def allowed_networks(self, workload: RuntimeWorkloadSpec):
+        return (
+            NetworkGrant(
+                network_name="ai-workshop-agent-runs",
+                purpose=NetworkGrantPurpose.PRIVATE,
+            ),
+        )
+
+
+def test_create_consumes_network_grants_from_policy():
+    executor = CapturingExecutor()
+    ctl = RootlessDockerController(
+        policy=AllowPolicy(),
+        network_policy=PrivateNetworkPolicy(),
+        executor=executor,
+    )
+
+    ctl.create(
+        RuntimeWorkloadSpec(
+            workload_id="run-123",
+            image="python:3.12-slim",
+        )
+    )
+
+    argv, _ = executor.calls[-1]
+    assert argv[argv.index("--network") + 1] == "ai-workshop-agent-runs"
