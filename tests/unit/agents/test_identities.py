@@ -117,3 +117,27 @@ def test_list_excludes_archived_by_default(tmp_path: Path):
         "agent-one",
         "agent-two",
     ]
+
+
+def test_agent_create_rolls_back_principal_when_agent_persist_fails(
+    tmp_path: Path,
+    monkeypatch,
+):
+    principals, agents = services(tmp_path)
+
+    def fail_persist() -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(agents, "_persist", fail_persist)
+
+    with pytest.raises(OSError, match="disk full"):
+        agents.create_persistent(
+            "agent-rollback",
+            display_name="Rollback",
+            owner_principal_id="user-owner",
+        )
+
+    with pytest.raises(KeyError, match="unknown principal"):
+        principals.get("agent-rollback")
+    with pytest.raises(KeyError, match="unknown agent"):
+        agents.get("agent-rollback")
