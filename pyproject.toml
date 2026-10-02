@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Isolated local development environment for AI agents"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=50,<51",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "mcp>=2,<3",
