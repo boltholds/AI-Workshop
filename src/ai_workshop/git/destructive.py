@@ -27,7 +27,9 @@ class GitDestructivePreview(_FrozenModel):
     operation: GitDestructiveOperation
     project_id: str
     target: str
+    target_oid: str
     remote: str = ""
+    remote_url: str = ""
     current_head: str
     current_status: str
     digest: str
@@ -205,11 +207,24 @@ class GitDestructiveService:
             project.path,
             ["status", "--porcelain=v1", "--untracked-files=all"],
         ).stdout.rstrip("\n")
+        target_oid = self._resolve_target_oid(
+            operation,
+            project.path,
+            target,
+        )
+        remote_url = ""
+        if remote:
+            remote_url = self.git._run(
+                project.path,
+                ["remote", "get-url", remote],
+            ).stdout.strip()
         payload = {
             "operation": operation.value,
             "project_id": project_id,
             "target": target,
+            "target_oid": target_oid,
             "remote": remote,
+            "remote_url": remote_url,
             "current_head": head,
             "current_status": status,
         }
@@ -217,6 +232,23 @@ class GitDestructiveService:
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         return GitDestructivePreview(**payload, digest=digest)
+
+    def _resolve_target_oid(
+        self,
+        operation: GitDestructiveOperation,
+        project_path,
+        target: str,
+    ) -> str:
+        if operation is GitDestructiveOperation.DELETE_BRANCH:
+            ref = f"refs/heads/{target}"
+        elif operation is GitDestructiveOperation.DELETE_TAG:
+            ref = f"refs/tags/{target}"
+        else:
+            ref = f"{target}^{{commit}}"
+        return self.git._run(
+            project_path,
+            ["rev-parse", "--verify", ref],
+        ).stdout.strip()
 
     def _rebuild_preview(
         self,
