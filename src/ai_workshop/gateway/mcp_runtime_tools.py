@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-def register_mcp_runtime_tools(server, proxy, principal_resolver) -> None:
+def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_registry=None) -> None:
     def actor() -> str:
         principal_id = principal_resolver.current_principal_id()
         if not principal_id:
@@ -83,3 +83,63 @@ def register_mcp_runtime_tools(server, proxy, principal_resolver) -> None:
             prompt_name,
             arguments,
         )
+
+
+    if promotion_registry is not None:
+        @server.tool(name="mcp.promote")
+        async def mcp_promote(
+            server_id: str,
+            tool_name: str,
+            exposed_name: str | None = None,
+            ctx=None,
+        ) -> dict[str, object]:
+            name = exposed_name or tool_name
+            existing = {item.name for item in await server.list_tools()}
+            promoted_names = {
+                item.exposed_name for item in promotion_registry.list()
+            }
+            if name in existing and name not in promoted_names:
+                raise RuntimeError(
+                    "promoted MCP tool name collides with upstream tool"
+                )
+
+            promoted = promotion_registry.promote(
+                server_id,
+                tool_name,
+                exposed_name=exposed_name,
+            )
+
+            def promoted_tool(
+                arguments: dict[str, object],
+            ) -> dict[str, object]:
+                return safe(
+                    proxy.tool_call,
+                    actor(),
+                    promoted.server_id,
+                    promoted.downstream_name,
+                    arguments,
+                )
+
+            server.add_tool(
+                promoted_tool,
+                name=promoted.exposed_name,
+                description=(
+                    f"Promoted downstream MCP tool "
+                    f"{promoted.server_id}/{promoted.downstream_name}"
+                ),
+            )
+            if ctx is not None and hasattr(ctx, "notify_tools_changed"):
+                await ctx.notify_tools_changed()
+            return promoted.model_dump(mode="json")
+
+        @server.tool(name="mcp.unpromote")
+        async def mcp_unpromote(
+            exposed_name: str,
+            ctx=None,
+        ) -> dict[str, bool]:
+            promotion_registry.resolve(exposed_name)
+            server.remove_tool(exposed_name)
+            promotion_registry.unpromote(exposed_name)
+            if ctx is not None and hasattr(ctx, "notify_tools_changed"):
+                await ctx.notify_tools_changed()
+            return {"ok": True}
