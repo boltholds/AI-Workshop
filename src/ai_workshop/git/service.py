@@ -411,9 +411,11 @@ class GitRepositoryService:
 
         parsed = urlsplit(value)
         if parsed.scheme in _NETWORK_REMOTE_SCHEMES:
-            if parsed.scheme in {"http", "https"} and (
-                parsed.username is not None or parsed.password is not None
-            ):
+            if parsed.password is not None:
+                raise ValueError(
+                    "Git remote URL must not contain embedded credentials"
+                )
+            if parsed.scheme in {"http", "https"} and parsed.username is not None:
                 raise ValueError(
                     "Git remote URL must not contain embedded credentials"
                 )
