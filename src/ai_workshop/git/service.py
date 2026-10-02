@@ -209,6 +209,77 @@ class GitRepositoryService:
         project = self._project(project_id)
         self._run(project.path, ["tag", self._ref(tag)])
 
+    def push(
+        self,
+        project_id: str,
+        *,
+        remote: str = "origin",
+        branch: str,
+        credential_id: str | None = None,
+    ) -> None:
+        project = self._project(project_id)
+        remote = self._remote_name(remote)
+        branch = self._ref(branch)
+        with self._credential_context(credential_id) as context:
+            self._run(
+                project.path,
+                ["push", remote, branch],
+                context=context,
+            )
+
+    def merge(self, project_id: str, ref: str) -> None:
+        project = self._project(project_id)
+        self._run(project.path, ["merge", "--no-edit", self._ref(ref)])
+
+    def rebase(self, project_id: str, ref: str) -> None:
+        project = self._project(project_id)
+        self._run(project.path, ["rebase", self._ref(ref)])
+
+    def rebase_continue(self, project_id: str) -> None:
+        project = self._project(project_id)
+        self._run(
+            project.path,
+            ["-c", "core.editor=true", "rebase", "--continue"],
+        )
+
+    def rebase_abort(self, project_id: str) -> None:
+        project = self._project(project_id)
+        self._run(project.path, ["rebase", "--abort"])
+
+    def cherry_pick(self, project_id: str, ref: str) -> None:
+        project = self._project(project_id)
+        self._run(project.path, ["cherry-pick", self._ref(ref)])
+
+    def _hard_reset_confirmed(self, project_id: str, ref: str) -> None:
+        project = self._project(project_id)
+        self._run(project.path, ["reset", "--hard", self._ref(ref)])
+
+    def _delete_branch_confirmed(self, project_id: str, branch: str) -> None:
+        project = self._project(project_id)
+        self._run(project.path, ["branch", "-D", self._ref(branch)])
+
+    def _delete_tag_confirmed(self, project_id: str, tag: str) -> None:
+        project = self._project(project_id)
+        self._run(project.path, ["tag", "-d", self._ref(tag)])
+
+    def _force_push_confirmed(
+        self,
+        project_id: str,
+        *,
+        remote: str,
+        branch: str,
+        credential_id: str | None = None,
+    ) -> None:
+        project = self._project(project_id)
+        remote = self._remote_name(remote)
+        branch = self._ref(branch)
+        with self._credential_context(credential_id) as context:
+            self._run(
+                project.path,
+                ["push", "--force-with-lease", remote, branch],
+                context=context,
+            )
+
     def _project(self, project_id: str) -> ProjectRecord:
         project = self.projects.get(project_id)
         if not project.path.is_dir():
