@@ -24,8 +24,8 @@
 - A malicious workspace path must not escape the server-owned storage root; Task 3 adds `test_runtime_mount_rejects_storage_escape`.
 - A nested container must never receive the runtime socket; Task 4 adds `test_nested_spec_rejects_runtime_socket_mount`.
 - A caller must not smuggle Docker flags through image/name/environment fields; Task 2 adds `test_runtime_models_reject_cli_fragment_identifiers`.
-- Restarting the control plane must not destroy rootless runtime/project state; Task 6 adds `test_server_mode_restart_preserves_state`.
-- Desktop Mode Compose must remain free of rootless runtime dependencies; Task 6 adds `test_desktop_compose_does_not_include_server_runtime`.
+- Restarting the control plane must not destroy rootless runtime/project state; Task 7 adds `test_server_mode_restart_preserves_state`.
+- Desktop Mode Compose must remain free of rootless runtime dependencies; Task 7 adds `test_desktop_compose_does_not_include_server_runtime`.
 
 ---
 
@@ -208,7 +208,7 @@ RuntimeController consumes computed grants rather than caller-supplied network n
 
 - [ ] **Step 4: Verify GREEN**
 
-Run Task 6 tests.
+Run Task 5 tests.
 
 - [ ] **Step 5: Commit**
 
