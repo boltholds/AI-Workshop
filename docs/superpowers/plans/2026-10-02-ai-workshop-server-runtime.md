@@ -180,7 +180,41 @@ Run Task 4 tests.
 
 `git commit -am "feat: enforce nested workload runtime policy"`
 
-### Task 5: Private runtime endpoint relay
+### Task 5: Server runtime network policy
+
+**Files:**
+- Create: `src/ai_workshop/server/network.py`
+- Test: `tests/unit/server/test_network_policy.py`
+
+**Interfaces:**
+- Produces: `RuntimeNetworkPolicy.allowed_networks(workload) -> tuple[NetworkGrant, ...]`.
+- Produces explicit outbound policy categories for run, MCP, project-service, and infrastructure workloads.
+
+- [ ] **Step 1: Write failing network-policy tests**
+
+Assert:
+- control-plane/rootless socket networks are never granted to AgentRun or MCP workloads;
+- a project service is private until explicitly published;
+- AgentRun/MCP outbound access can be restricted by deployment policy;
+- callers cannot request arbitrary existing Docker network names.
+
+- [ ] **Step 2: Verify RED**
+
+Run: `uv run pytest tests/unit/server/test_network_policy.py -v`.
+
+- [ ] **Step 3: Implement typed network policy grants**
+
+RuntimeController consumes computed grants rather than caller-supplied network names.
+
+- [ ] **Step 4: Verify GREEN**
+
+Run Task 6 tests.
+
+- [ ] **Step 5: Commit**
+
+`git commit -am "feat: add server runtime network policy"`
+
+### Task 6: Private runtime endpoint relay
 
 **Files:**
 - Create: `src/ai_workshop/server/endpoints.py`
@@ -197,7 +231,7 @@ Assert endpoints bind only to the configured private runtime interface, are uniq
 
 - [ ] **Step 2: Verify RED**
 
-Run Task 5 tests.
+Run Task 6 tests.
 
 - [ ] **Step 3: Implement endpoint allocation and controller integration**
 
@@ -205,13 +239,13 @@ No LAN/public bind is allowed at this layer.
 
 - [ ] **Step 4: Verify GREEN**
 
-Run Task 5 tests.
+Run Task 6 tests.
 
 - [ ] **Step 5: Commit**
 
 `git commit -am "feat: add private runtime endpoint relay"`
 
-### Task 6: Server deployment profile and smoke test
+### Task 7: Server deployment profile and smoke test
 
 **Files:**
 - Create: `compose.server.yaml`
