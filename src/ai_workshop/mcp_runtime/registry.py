@@ -107,6 +107,35 @@ class McpRegistryStore:
                 raise
             return removed
 
+    def export_metadata(self) -> tuple[McpServerRecord, ...]:
+        with self._lock:
+            return tuple(self._records[key] for key in sorted(self._records))
+
+    def restore_metadata(
+        self,
+        records: tuple[McpServerRecord, ...],
+    ) -> None:
+        restored: dict[str, McpServerRecord] = {}
+        for record in records:
+            server_id = record.registration.server_id
+            if server_id in restored:
+                raise ValueError("duplicate MCP server registration")
+            registration = record.registration.model_copy(
+                update={"state": McpServerState.STOPPED}
+            )
+            restored[server_id] = record.model_copy(
+                update={"registration": registration}
+            )
+
+        with self._lock:
+            previous = self._records
+            self._records = restored
+            try:
+                self._persist()
+            except Exception:
+                self._records = previous
+                raise
+
     def _load(self) -> None:
         if not self.state_path.exists():
             return

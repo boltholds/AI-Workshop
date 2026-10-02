@@ -20,6 +20,8 @@ class ResetService:
         state_resetters: dict[str, Callable[[], None]],
         infrastructure_resetter: Callable[[], None] | None,
         project_roots: list[Path],
+        run_runtime_paths: list[Path] | None = None,
+        protected_paths: list[Path] | None = None,
         clock: Callable[[], float] | None = None,
     ):
         self.cache_paths = [Path(path).resolve() for path in cache_paths]
@@ -29,6 +31,12 @@ class ResetService:
         self.state_resetters = dict(state_resetters)
         self.infrastructure_resetter = infrastructure_resetter
         self.project_roots = [Path(path).resolve() for path in project_roots]
+        self.run_runtime_paths = [
+            Path(path).resolve() for path in (run_runtime_paths or [])
+        ]
+        self.protected_paths = [
+            Path(path).resolve() for path in (protected_paths or [])
+        ]
         self.clock = clock or time.monotonic
         self._confirmations: dict[str, ConfirmationToken] = {}
         self._validate_reset_paths()
@@ -40,6 +48,9 @@ class ResetService:
         elif scope == "browser-artifacts":
             paths = self.browser_artifact_paths
             actions = ["clear:browser-artifacts"]
+        elif scope == "run-runtime":
+            paths = self.run_runtime_paths
+            actions = ["clear:run-runtime"]
         elif scope.startswith("state:"):
             state_id = scope.partition(":")[2]
             if not state_id or state_id not in self.state_resetters:
@@ -98,6 +109,9 @@ class ResetService:
         elif plan.scope == "browser-artifacts":
             for path in self.browser_artifact_paths:
                 self._clear_directory(path)
+        elif plan.scope == "run-runtime":
+            for path in self.run_runtime_paths:
+                self._clear_directory(path)
         elif plan.scope.startswith("state:"):
             state_id = plan.scope.partition(":")[2]
             self.state_resetters[state_id]()
@@ -116,10 +130,28 @@ class ResetService:
             raise ValueError("reset plan does not match configured scope")
 
     def _validate_reset_paths(self) -> None:
-        for reset_path in self.cache_paths + self.browser_artifact_paths:
+        for reset_path in (
+            self.cache_paths
+            + self.browser_artifact_paths
+            + self.run_runtime_paths
+        ):
             for project_root in self.project_roots:
                 if self._overlap(reset_path, project_root):
                     raise ValueError("reset path overlaps project root")
+            for protected_path in self.protected_paths:
+                if self._overlap(reset_path, protected_path):
+                    raise ValueError("reset path overlaps protected state")
+
+    def allowed_scopes(self) -> tuple[str, ...]:
+        scopes = ["cache", "browser-artifacts"]
+        if self.run_runtime_paths:
+            scopes.append("run-runtime")
+        scopes.extend(
+            f"state:{state_id}" for state_id in sorted(self.state_resetters)
+        )
+        if self.infrastructure_resetter is not None:
+            scopes.append("infrastructure")
+        return tuple(scopes)
 
     @staticmethod
     def _overlap(left: Path, right: Path) -> bool:
