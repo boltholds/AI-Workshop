@@ -127,3 +127,13 @@ def test_final_server_deployment_persists_required_domains():
         "browser-profile",
         "browser-artifacts",
     } <= volumes
+
+
+def test_final_server_runtime_has_no_tcp_daemon_listener():
+    compose = load_yaml("deploy/server/compose.yaml")
+    runtime = compose["services"]["rootless-runtime"]
+    command = runtime.get("command") or []
+    serialized = " ".join(command)
+    assert "unix:///run/user/1000/docker.sock" in serialized
+    assert "2375" not in serialized
+    assert "tcp://" not in serialized
