@@ -16,6 +16,11 @@ from ai_workshop.server.rootless import (
 )
 
 
+class AllowNetworkPolicy:
+    def allowed_networks(self, workload: RuntimeWorkloadSpec):
+        return ()
+
+
 class AllowPolicy:
     def validate(self, spec: RuntimeWorkloadSpec) -> None:
         return None
@@ -38,7 +43,11 @@ class CapturingExecutor:
 
 def controller():
     executor = CapturingExecutor()
-    return RootlessDockerController(policy=AllowPolicy(), executor=executor), executor
+    return RootlessDockerController(
+        policy=AllowPolicy(),
+        network_policy=AllowNetworkPolicy(),
+        executor=executor,
+    ), executor
 
 
 def test_create_uses_private_rootless_socket_and_fixed_argv():
@@ -137,7 +146,11 @@ def test_controller_does_not_expose_raw_docker_argument_parameters():
 
 def test_create_validates_policy_before_runtime_execution():
     executor = CapturingExecutor()
-    ctl = RootlessDockerController(policy=RejectPolicy(), executor=executor)
+    ctl = RootlessDockerController(
+        policy=RejectPolicy(),
+        network_policy=AllowNetworkPolicy(),
+        executor=executor,
+    )
 
     with pytest.raises(ValueError, match="policy rejected"):
         ctl.create(
