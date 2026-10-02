@@ -50,6 +50,11 @@ services:
       - server-state:/state
     ports:
       - "127.0.0.1:${AI_WORKSHOP_MCP_PORT:-8765}:8765"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',8765),2); s.close()"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
     restart: unless-stopped
     networks: [server-control]
 
