@@ -72,20 +72,30 @@ class RootlessDockerController:
         self,
         *,
         policy: RuntimeWorkloadPolicy,
+        network_policy: RuntimeNetworkPolicyProtocol,
         executor: RuntimeExecutor | None = None,
         timeout_seconds: float = 60.0,
     ):
         self.policy = policy
+        self.network_policy = network_policy
         self.executor = executor or SubprocessRuntimeExecutor()
         self.timeout_seconds = timeout_seconds
 
     def create(self, spec: RuntimeWorkloadSpec) -> RuntimeWorkloadStatus:
         self.policy.validate(spec)
+        network_grants = self.network_policy.allowed_networks(spec)
         argv = self._base() + ["create", "--name", spec.workload_id]
+        if network_grants:
+            argv.extend(["--network", network_grants[0].network_name])
         for variable in spec.environment:
             argv.extend(["--env", f"{variable.name}={variable.value}"])
         argv.extend(["--", spec.image, *spec.command])
         self._execute(argv)
+        for grant in network_grants[1:]:
+            self._execute(
+                self._base()
+                + ["network", "connect", grant.network_name, spec.workload_id]
+            )
         return RuntimeWorkloadStatus(
             workload_id=spec.workload_id,
             state=RuntimeWorkloadState.CREATED,
