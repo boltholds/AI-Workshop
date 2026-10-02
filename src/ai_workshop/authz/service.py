@@ -24,6 +24,13 @@ class AuthorizationService:
                 permissions=frozenset(global_effective),
             )
 
+        if "workshop.admin" in global_effective:
+            return PermissionSet(
+                principal_id=principal_id,
+                project_id=project_id,
+                permissions=frozenset(global_effective),
+            )
+
         membership = self.principals.project_membership(
             principal_id,
             project_id,
