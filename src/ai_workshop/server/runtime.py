@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
+DEFAULT_RUNTIME_SOCKET = "/run/ai-workshop-runtime/docker.sock"
+
+
 from ai_workshop.server.models import (
     RuntimeEndpoint,
     RuntimeWorkloadSpec,
