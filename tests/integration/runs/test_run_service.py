@@ -40,13 +40,14 @@ class FakeWorkspaces:
 
 class FakeRuntime:
     def __init__(self):
+        self.ensured_images: list[str] = []
         self.created = []
         self.started: list[str] = []
         self.stopped: list[str] = []
         self.removed: list[str] = []
 
     def ensure_image(self, image: str) -> None:
-        pass
+        self.ensured_images.append(image)
 
     def create(self, spec):
         self.created.append(spec)
@@ -163,6 +164,7 @@ def test_run_start_captures_permissions_and_mounts_only_run_workspace(tmp_path: 
     )
     assert workspaces.created == [("project-alpha", "run-one", "main", True)]
     spec = runtime.created[0]
+    assert runtime.ensured_images == ["ai-workshop-agent:server"]
     assert spec.workload_id == "run-one"
     assert spec.image == "ai-workshop-agent:server"
     assert spec.entrypoint is None
