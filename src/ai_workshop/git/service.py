@@ -8,7 +8,7 @@ import re
 import shlex
 import subprocess
 from typing import ContextManager
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from ai_workshop.credentials.git_env import GitCredentialContext
 from ai_workshop.credentials.protocol import CredentialProvider
@@ -19,6 +19,9 @@ from ai_workshop.projects.protocol import ProjectService
 
 _REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/@{}+-]*$")
 _REMOTE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_SCP_REMOTE_PATTERN = re.compile(r"^(?:[^/@:\\s]+@)?[^/:\\s]+:.+$")
+_WINDOWS_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:[\\\\/]")
+_NETWORK_REMOTE_SCHEMES = frozenset({"ssh", "http", "https", "git"})
 _CONTROL_ENV = {
     "AI_WORKSHOP_WORKSPACE_TOKEN",
     "AI_WORKSHOP_BROWSER_TOKEN",
@@ -42,10 +45,15 @@ class GitRepositoryService:
         credentials: CredentialProvider,
         *,
         timeout_seconds: float = 60.0,
+        allowed_local_remote_roots: tuple[Path, ...] = (),
     ):
         self.projects = projects
         self.credentials = credentials
         self.timeout_seconds = timeout_seconds
+        self.allowed_local_remote_roots = tuple(
+            Path(root).expanduser().resolve()
+            for root in allowed_local_remote_roots
+        )
 
     def clone(
         self,
@@ -383,8 +391,7 @@ class GitRepositoryService:
             raise ValueError("Git path must be relative and cannot escape project")
         return parsed.as_posix()
 
-    @staticmethod
-    def _validate_remote_url(value: str) -> None:
+    def _validate_remote_url(self, value: str) -> None:
         if (
             not value
             or value.startswith("-")
@@ -394,10 +401,40 @@ class GitRepositoryService:
         ):
             raise ValueError("invalid Git remote URL")
 
-        parsed = urlsplit(value)
-        if parsed.scheme in {"http", "https"} and (
-            parsed.username is not None or parsed.password is not None
+        is_windows_path = _WINDOWS_DRIVE_PATTERN.match(value) is not None
+        if (
+            "://" not in value
+            and not is_windows_path
+            and _SCP_REMOTE_PATTERN.fullmatch(value) is not None
         ):
-            raise ValueError(
-                "Git remote URL must not contain embedded credentials"
-            )
+            return
+
+        parsed = urlsplit(value)
+        if parsed.scheme in _NETWORK_REMOTE_SCHEMES:
+            if parsed.scheme in {"http", "https"} and (
+                parsed.username is not None or parsed.password is not None
+            ):
+                raise ValueError(
+                    "Git remote URL must not contain embedded credentials"
+                )
+            return
+
+        if parsed.scheme == "file":
+            if parsed.netloc not in {"", "localhost"}:
+                raise ValueError("network file Git remotes are not allowed")
+            local_path = Path(unquote(parsed.path))
+        elif not parsed.scheme or is_windows_path:
+            local_path = Path(value)
+        else:
+            raise ValueError("unsupported Git remote URL scheme")
+
+        if not local_path.is_absolute():
+            raise ValueError("local Git remote must use an absolute path")
+        resolved = local_path.expanduser().resolve(strict=False)
+        for root in self.allowed_local_remote_roots:
+            try:
+                resolved.relative_to(root)
+                return
+            except ValueError:
+                continue
+        raise ValueError("local Git remote is not allowed")
