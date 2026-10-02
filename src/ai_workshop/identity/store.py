@@ -60,6 +60,23 @@ class PrincipalStore:
         with self._lock:
             return list(self._principals.values())
 
+    def remove_unreferenced(self, principal_id: str) -> None:
+        with self._lock:
+            self.get(principal_id)
+            if self._global_roles.get(principal_id):
+                raise ValueError("principal still has global role grants")
+            if any(
+                key[0] == principal_id
+                for key in self._memberships
+            ):
+                raise ValueError("principal still has project memberships")
+            principal = self._principals.pop(principal_id)
+            try:
+                self._persist()
+            except Exception:
+                self._principals[principal_id] = principal
+                raise
+
     def create_role(self, role: RoleDefinition) -> RoleDefinition:
         with self._lock:
             if role.role_id in self._roles:
