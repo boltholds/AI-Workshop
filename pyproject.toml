@@ -13,6 +13,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "mcp>=2,<3",
   "Pillow>=11,<13",
+  "PyJWT[crypto]>=2.15,<3",
   "opencv-python-headless>=4.10,<5",
   "numpy>=2,<3",
   "playwright==1.63.0",
