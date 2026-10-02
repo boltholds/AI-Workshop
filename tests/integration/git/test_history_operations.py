@@ -221,3 +221,71 @@ def test_force_push_requires_confirmation_and_uses_force_with_lease(tmp_path: Pa
         text=True,
     ).stdout.strip()
     assert remote_head == rewritten
+
+
+def test_force_push_confirmation_rejects_remote_url_change(tmp_path: Path):
+    remote, _ = init_remote(tmp_path)
+    git, _ = service(tmp_path)
+    project = git.clone("demo", str(remote))
+    configure_user(project.path)
+
+    destructive = GitDestructiveService(git)
+    preview = destructive.preview_force_push("demo", remote="origin", branch="main")
+    token = destructive.prepare(preview).token
+
+    replacement = tmp_path / "replacement.git"
+    subprocess.run(
+        ["git", "init", "--bare", str(replacement)],
+        check=True,
+        capture_output=True,
+    )
+    git.remote_set("demo", "origin", str(replacement))
+
+    with pytest.raises(PermissionError, match="changed since confirmation"):
+        destructive.force_push(
+            "demo",
+            remote="origin",
+            branch="main",
+            confirmation_token=token,
+        )
+
+
+def test_delete_branch_confirmation_rejects_target_ref_change(tmp_path: Path):
+    remote, _ = init_remote(tmp_path)
+    git, _ = service(tmp_path)
+    project = git.clone("demo", str(remote))
+    configure_user(project.path)
+
+    git.branch_create("demo", "delete-me")
+    destructive = GitDestructiveService(git)
+    preview = destructive.preview_delete_branch("demo", "delete-me")
+    token = destructive.prepare(preview).token
+
+    run_git(project.path, "branch", "-f", "delete-me", "HEAD~0")
+    (project.path / "advance.txt").write_text("advance\n", encoding="utf-8")
+    git.add("demo", ["advance.txt"])
+    git.commit("demo", "advance current branch")
+    run_git(project.path, "branch", "-f", "delete-me", "HEAD")
+
+    with pytest.raises(PermissionError, match="changed since confirmation"):
+        destructive.delete_branch("demo", "delete-me", token)
+
+
+def test_hard_reset_confirmation_rejects_target_ref_change(tmp_path: Path):
+    remote, _ = init_remote(tmp_path)
+    git, _ = service(tmp_path)
+    project = git.clone("demo", str(remote))
+    configure_user(project.path)
+
+    git.branch_create("demo", "target")
+    destructive = GitDestructiveService(git)
+    preview = destructive.preview_hard_reset("demo", "target")
+    token = destructive.prepare(preview).token
+
+    (project.path / "advance-target.txt").write_text("advance\n", encoding="utf-8")
+    git.add("demo", ["advance-target.txt"])
+    git.commit("demo", "advance")
+    run_git(project.path, "branch", "-f", "target", "HEAD")
+
+    with pytest.raises(PermissionError, match="changed since confirmation"):
+        destructive.hard_reset("demo", "target", token)
