@@ -134,6 +134,7 @@ def test_final_server_runtime_has_no_tcp_daemon_listener():
     runtime = compose["services"]["rootless-runtime"]
     command = runtime.get("command") or []
     serialized = " ".join(command)
+    assert command[0] == "dockerd"
     assert "unix:///run/user/1000/docker.sock" in serialized
     assert "2375" not in serialized
     assert "tcp://" not in serialized
