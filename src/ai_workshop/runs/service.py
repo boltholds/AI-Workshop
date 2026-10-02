@@ -104,8 +104,7 @@ class RunService:
                 spec = RuntimeWorkloadSpec(
                     workload_id=run_id,
                     image=self.runtime_image,
-                    command=("-f", "/dev/null"),
-                    entrypoint="/usr/bin/tail",
+                    command=("run-host",),
                     kind=RuntimeWorkloadKind.AGENT_RUN,
                     mounts=(
                         RuntimeMount(
