@@ -8,6 +8,7 @@ import re
 import shlex
 import subprocess
 from typing import ContextManager
+from urllib.parse import urlsplit
 
 from ai_workshop.credentials.git_env import GitCredentialContext
 from ai_workshop.credentials.protocol import CredentialProvider
@@ -392,3 +393,11 @@ class GitRepositoryService:
             or "\r" in value
         ):
             raise ValueError("invalid Git remote URL")
+
+        parsed = urlsplit(value)
+        if parsed.scheme in {"http", "https"} and (
+            parsed.username is not None or parsed.password is not None
+        ):
+            raise ValueError(
+                "Git remote URL must not contain embedded credentials"
+            )
