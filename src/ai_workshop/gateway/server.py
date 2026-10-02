@@ -13,6 +13,9 @@ def build_server(
     service_controller=None,
     state_snapshot_service=None,
     reset_service=None,
+    project_service=None,
+    git_service=None,
+    git_destructive_service=None,
 ):
     from mcp.server.mcpserver import MCPServer
 
@@ -59,13 +62,27 @@ def build_server(
     def shell_cancel(run_id: str) -> bool:
         return safe(client.shell_cancel, run_id)
 
-    @server.tool()
-    def git_status(project_id: str) -> str:
-        return safe(client.git_status, project_id)
+    if git_service is None:
+        @server.tool()
+        def git_status(project_id: str) -> str:
+            return safe(client.git_status, project_id)
 
-    @server.tool()
-    def git_diff(project_id: str, staged: bool = False) -> str:
-        return safe(client.git_diff, project_id, staged=staged)
+        @server.tool()
+        def git_diff(project_id: str, staged: bool = False) -> str:
+            return safe(client.git_diff, project_id, staged=staged)
+    else:
+        from ai_workshop.gateway.git_tools import register_git_tools
+
+        register_git_tools(
+            server,
+            git_service,
+            destructive=git_destructive_service,
+        )
+
+    if project_service is not None:
+        from ai_workshop.gateway.project_tools import register_project_tools
+
+        register_project_tools(server, project_service)
 
     from ai_workshop.gateway.recovery_tools import register_recovery_tools
     register_recovery_tools(
@@ -102,6 +119,9 @@ def run_gateway(
     service_controller=None,
     state_snapshot_service=None,
     reset_service=None,
+    project_service=None,
+    git_service=None,
+    git_destructive_service=None,
 ) -> None:
     server = build_server(
         workspace_url,
@@ -111,6 +131,9 @@ def run_gateway(
         service_controller=service_controller,
         state_snapshot_service=state_snapshot_service,
         reset_service=reset_service,
+        project_service=project_service,
+        git_service=git_service,
+        git_destructive_service=git_destructive_service,
     )
     server.run(
         transport="streamable-http",
