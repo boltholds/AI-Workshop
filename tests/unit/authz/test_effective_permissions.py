@@ -156,3 +156,23 @@ def test_require_rejects_missing_permission(tmp_path: Path):
 
     with pytest.raises(PermissionError, match="permission denied"):
         authz.require("user-one", "filesystem.write", "project-alpha")
+
+
+def test_workshop_admin_permission_applies_to_any_permission(tmp_path: Path):
+    identity = PrincipalStore(tmp_path / "identity.json")
+    identity.create(UserPrincipal(principal_id="admin-user", display_name="Admin"))
+    identity.create_role(
+        RoleDefinition(role_id="admin", allow=("workshop.admin",))
+    )
+    identity.grant_global_role("admin-user", "admin")
+    authz = AuthorizationService(identity)
+
+    global_permissions = authz.effective_permissions("admin-user", None)
+    project_permissions = authz.effective_permissions(
+        "admin-user",
+        "project-without-membership",
+    )
+
+    assert global_permissions.allows("agents.manage") is True
+    assert project_permissions.allows("runs.start") is True
+    assert project_permissions.allows("git.force_push") is True

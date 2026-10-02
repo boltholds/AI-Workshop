@@ -60,6 +60,21 @@ class PrincipalStore:
         with self._lock:
             return list(self._principals.values())
 
+    def find_external(
+        self,
+        provider_id: str,
+        subject: str,
+    ) -> ExternalIdentityPrincipal | None:
+        with self._lock:
+            for principal in self._principals.values():
+                if (
+                    isinstance(principal, ExternalIdentityPrincipal)
+                    and principal.provider_id == provider_id
+                    and principal.subject == subject
+                ):
+                    return principal
+            return None
+
     def remove_unreferenced(self, principal_id: str) -> None:
         with self._lock:
             self.get(principal_id)
@@ -114,6 +129,24 @@ class PrincipalStore:
                 roles.remove(role_id)
                 if not roles:
                     self._global_roles.pop(principal_id, None)
+                raise
+
+    def revoke_global_role(self, principal_id: str, role_id: str) -> None:
+        with self._lock:
+            self.get(principal_id)
+            self.get_role(role_id)
+            roles = self._global_roles.get(principal_id)
+            if roles is None or role_id not in roles:
+                return
+            roles.remove(role_id)
+            if not roles:
+                self._global_roles.pop(principal_id, None)
+            try:
+                self._persist()
+            except Exception:
+                restored = self._global_roles.setdefault(principal_id, [])
+                if role_id not in restored:
+                    restored.append(role_id)
                 raise
 
     def global_roles(self, principal_id: str) -> tuple[str, ...]:

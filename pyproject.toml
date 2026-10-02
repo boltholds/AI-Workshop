@@ -8,16 +8,19 @@ version = "0.1.0"
 description = "Isolated local development environment for AI agents"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=50,<51",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "mcp>=2,<3",
   "Pillow>=11,<13",
+  "PyJWT[crypto]>=2.15,<3",
   "opencv-python-headless>=4.10,<5",
   "numpy>=2,<3",
   "playwright==1.63.0",
   "pydantic>=2,<3",
   "PyYAML>=6,<7",
   "uvicorn>=0.35,<1",
+  "webauthn>=3,<4",
 ]
 
 [dependency-groups]

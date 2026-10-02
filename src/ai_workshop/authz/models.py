@@ -11,4 +11,7 @@ class PermissionSet(BaseModel):
     permissions: frozenset[str] = frozenset()
 
     def allows(self, permission: str) -> bool:
-        return permission in self.permissions
+        return (
+            permission in self.permissions
+            or "workshop.admin" in self.permissions
+        )
