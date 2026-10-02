@@ -2,14 +2,15 @@
 
 Server Mode is packaged in `deploy/server/compose.yaml`. This guide starts from a clean Linux host and takes the deployment through bootstrap, startup, validation, persistence checks, LAN/offline configuration, upgrade, backup, and shutdown.
 
-The required outer services are:
+The production deployment uses a dedicated systemd-managed rootless Docker daemon owned by the `ai-workshop-runtime` host user. The outer Compose deployment contains:
 
-- `rootless-runtime` — the nested Docker runtime used for AgentRuns, MCP runtimes, and project services;
 - `server-control` — the autonomous Server Mode control plane;
 - `browser` — the persistent Chromium/browser diagnostics runtime;
 - `ingress` — the only outer service allowed to publish a host port.
 
-The host Docker socket is never mounted into AI Workshop. The nested runtime socket is shared only between `rootless-runtime` and `server-control`.
+The host rootful Docker socket is never mounted into AI Workshop. `server-control` receives only the dedicated rootless socket, normally `/run/user/1000/docker.sock`, bind-mounted inside the container as `/run/ai-workshop-runtime/1000/docker.sock`.
+
+The repository-level `compose.server.yaml` keeps the older DIND-rootless backend for CI/dev acceptance only; it is not the production runtime boundary.
 
 ## 1. Host requirements
 
@@ -212,14 +213,16 @@ You can inspect the installed implementation with `docker compose version`. Mode
 
 ## 8. Review the Server Mode configuration
 
-The default runtime configuration is:
+The production runtime configuration is:
 
 ```yaml
-storage_root: /srv/ai-workshop
-private_endpoint_host: rootless-runtime
+storage_root: /var/lib/ai-workshop/storage
+private_endpoint_host: host.docker.internal
 private_endpoint_start_port: 41000
 private_endpoint_end_port: 41999
 ```
+
+The storage path is intentionally the same host path that the rootless Docker daemon sees. This is required for AgentRun/project-service bind mounts created by the host-managed runtime.
 
 It lives at:
 
@@ -282,7 +285,7 @@ docker compose \
   ps
 ```
 
-All required services should move to running/healthy state.
+All outer services should move to running/healthy state. The dedicated rootless runtime is a host systemd user service and is checked separately with `systemctl --user status docker` or through `ai-workshop server doctor`.
 
 ## 10. Inspect startup logs
 
@@ -297,10 +300,17 @@ docker compose \
 Per-service examples:
 
 ```bash
-docker compose -f deploy/server/compose.yaml logs --tail=200 rootless-runtime
 docker compose -f deploy/server/compose.yaml logs --tail=200 server-control
 docker compose -f deploy/server/compose.yaml logs --tail=200 browser
 docker compose -f deploy/server/compose.yaml logs --tail=200 ingress
+```
+
+For the host-managed runtime:
+
+```bash
+machinectl shell ai-workshop-runtime@
+systemctl --user status docker --no-pager -l
+journalctl --user -u docker -n 100 --no-pager
 ```
 
 Do not solve a nested-runtime problem by mounting `/var/run/docker.sock` into a container.
@@ -329,27 +339,56 @@ A healthy result has:
 
 Treat a non-zero doctor result as a failed deployment even if `docker compose ps` says the container is running.
 
-## 12. Verify the nested rootless runtime
+## 12. Verify the host-managed rootless runtime
+
+On the host, the dedicated runtime should report cgroup v2 with the systemd driver:
+
+```bash
+machinectl shell ai-workshop-runtime@
+export DOCKER_HOST=unix:///run/user/1000/docker.sock
+docker info | grep -i -E 'Cgroup Driver|Cgroup Version|rootless'
+```
+
+Expected:
+
+```text
+Cgroup Driver: systemd
+Cgroup Version: 2
+```
+
+Verify actual resource enforcement:
+
+```bash
+docker run --rm --memory 128m --cpus 0.5 alpine:latest \
+  sh -c 'cat /sys/fs/cgroup/memory.max; cat /sys/fs/cgroup/cpu.max'
+```
+
+Expected:
+
+```text
+134217728
+50000 100000
+```
 
 From the control plane:
 
 ```bash
-docker compose \
+docker-compose \
   -f deploy/server/compose.yaml \
   exec -T server-control \
   docker --host unix:///run/ai-workshop-runtime/1000/docker.sock info
 ```
 
-Then verify the host socket is absent:
+Then verify the host rootful socket is absent:
 
 ```bash
-docker compose \
+docker-compose \
   -f deploy/server/compose.yaml \
   exec -T server-control \
   sh -lc 'test ! -S /var/run/docker.sock'
 ```
 
-This distinction is central to Server Mode: the control plane talks to the Workshop-owned nested runtime, never to the host Docker daemon.
+This distinction is central to Server Mode: the control plane talks only to the dedicated rootless daemon, never to the host rootful Docker daemon.
 
 ## 13. Verify persistent domains
 
@@ -709,3 +748,78 @@ docker compose \
 ```
 
 If the final doctor command reports `healthy: true`, the autonomous core deployment is running and the next operator tasks are to configure trusted ingress routes, project/credential/forge bindings, and any optional MCP/service profiles.
+
+
+## Production rootless runtime setup
+
+Create a dedicated host user:
+
+```bash
+adduser --disabled-password --gecos "" ai-workshop-runtime
+apt install -y uidmap slirp4netns fuse-overlayfs systemd-container
+```
+
+Confirm subordinate IDs:
+
+```bash
+grep '^ai-workshop-runtime:' /etc/subuid
+grep '^ai-workshop-runtime:' /etc/subgid
+```
+
+Configure systemd delegation:
+
+```bash
+mkdir -p /etc/systemd/system/user@.service.d
+cat >/etc/systemd/system/user@.service.d/delegate.conf <<'EOF'
+[Service]
+Delegate=cpu cpuset io memory pids
+EOF
+systemctl daemon-reload
+loginctl enable-linger ai-workshop-runtime
+```
+
+Install rootless Docker from a real user systemd session:
+
+```bash
+machinectl shell ai-workshop-runtime@
+dockerd-rootless-setuptool.sh install
+```
+
+On Ubuntu hosts where the default detached network namespace fails during Docker bridge/NAT initialization, add the compatibility override that was validated on production:
+
+```bash
+mkdir -p ~/.config/systemd/user/docker.service.d
+cat > ~/.config/systemd/user/docker.service.d/override.conf <<'EOF'
+[Service]
+Environment="DOCKERD_ROOTLESS_ROOTLESSKIT_NET=slirp4netns"
+Environment="DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=builtin"
+Environment="DOCKERD_ROOTLESS_ROOTLESSKIT_DETACH_NETNS=false"
+EOF
+
+systemctl --user daemon-reload
+systemctl --user reset-failed docker.service
+systemctl --user restart docker.service
+```
+
+Verify:
+
+```bash
+export DOCKER_HOST=unix:///run/user/1000/docker.sock
+docker run --rm alpine:latest echo ROOTLESS_OK
+docker info | grep -i -E 'Cgroup Driver|Cgroup Version'
+```
+
+For the production Compose deployment, `deploy/server/.env` should include:
+
+```env
+AI_WORKSHOP_RUNTIME_SOCKET=/run/user/1000/docker.sock
+AI_WORKSHOP_STORAGE_ROOT=/var/lib/ai-workshop/storage
+```
+
+Ensure the runtime user can access Workshop storage:
+
+```bash
+chown -R ai-workshop-runtime:ai-workshop-runtime /var/lib/ai-workshop/storage
+```
+
+The rootless runtime publishes controller-issued private endpoint ports from `41000` through `41999` on the host. Restrict that range at the host firewall to trusted local/container traffic; do not expose it to the public Internet.
