@@ -48,6 +48,7 @@ def build_server_gateway_runtime(
         project_service=projects,
         git_service=git,
         git_destructive_service=destructive_git,
+        credential_service=credentials,
     )
     return ServerGatewayRuntime(
         server=server,
