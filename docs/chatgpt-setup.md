@@ -195,3 +195,31 @@ Keep `tunnel-client run` healthy while ChatGPT is using the app. The tunnel is o
 The initial Server Mode gateway exposes server-native project and Git operations, including confirmation-gated destructive Git actions. Desktop-only workspace filesystem/shell tools are not exposed by this Server Mode composition.
 
 As more Server Mode AgentRun and dynamic MCP services are composed into the same gateway, the app endpoint and tunnel stay unchanged; only the discovered tool catalog expands.
+
+
+### Private Git repositories through the plugin
+
+The Server Mode plugin exposes write-only credential tools:
+
+~~~text
+credentials_list
+credentials_get
+credentials_create_ssh
+credentials_create_https_token
+~~~
+
+Credential secrets are accepted only on create calls. Tool responses contain metadata only and never return the stored secret material.
+
+For GitHub over SSH, create a profile such as `github-main` with `credentials_create_ssh`, then clone with:
+
+~~~text
+git_clone(
+  project_id="plc-web",
+  remote_url="git@github.com:boltholds/PLC-web.git",
+  credential_id="github-main"
+)
+~~~
+
+For HTTPS token authentication, use `credentials_create_https_token`, then pass the same `credential_id` to `git_clone`.
+
+The credential secret is stored under the Server Mode credential secret root with owner-only permissions and is not exposed through `credentials_list` or `credentials_get`.
