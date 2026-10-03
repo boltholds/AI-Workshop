@@ -17,6 +17,7 @@ def build_server(
     project_service=None,
     git_service=None,
     git_destructive_service=None,
+    credential_service=None,
     agent_service=None,
     run_service=None,
     authorization_service=None,
@@ -95,6 +96,11 @@ def build_server(
         from ai_workshop.gateway.project_tools import register_project_tools
 
         register_project_tools(server, project_service)
+
+    if credential_service is not None:
+        from ai_workshop.gateway.credential_tools import register_credential_tools
+
+        register_credential_tools(server, credential_service)
 
     if agent_service is not None or run_service is not None:
         if authorization_service is None or principal_resolver is None:
@@ -176,6 +182,7 @@ def run_gateway(
     project_service=None,
     git_service=None,
     git_destructive_service=None,
+    credential_service=None,
     agent_service=None,
     run_service=None,
     authorization_service=None,
@@ -195,6 +202,7 @@ def run_gateway(
         project_service=project_service,
         git_service=git_service,
         git_destructive_service=git_destructive_service,
+        credential_service=credential_service,
         agent_service=agent_service,
         run_service=run_service,
         authorization_service=authorization_service,
