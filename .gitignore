@@ -223,3 +223,6 @@ config/projects.local.yaml
 config/services.local.yaml
 .env.local
 config/recovery.local.yaml
+
+# Private REA rollout metadata
+.workshop-rea-rollback.*/

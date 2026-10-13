@@ -367,3 +367,34 @@ jobs:
           assert consumers == {"server-control"}, consumers
           assert "rootless-runtime" not in compose["services"]
           PY
+
+  rea-mcp-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned REA sidecar
+        run: docker build -f rea/Dockerfile -t wai-rea:ci .
+      - name: Verify non-root bridge and real REA MCP catalog
+        run: |
+          docker run --detach --name wai-rea-ci --network none --read-only --cap-drop ALL \
+            --user 10001:10001 --tmpfs /tmp:rw,nosuid,size=256m \
+            --tmpfs /data:rw,nosuid,uid=10001,gid=10001,size=256m \
+            --tmpfs /run/rea:rw,nosuid,uid=10001,gid=10001,size=1m \
+            -e AI_WORKSHOP_REA_TOKEN=ci-only-token wai-rea:ci
+          trap 'docker rm -f wai-rea-ci >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 40); do
+            if docker exec wai-rea-ci python -m ai_workshop.rea.health 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec -i wai-rea-ci python - <<'PY'
+          from ai_workshop.rea.client import ReaMcpClient
+          import os
+          assert os.getuid() == 10001
+          tools = ReaMcpClient('http://rea-mcp:8796/mcp', token='ci-only-token', uds='/run/rea/mcp.sock').list_tools()
+          assert len(tools) == 170
+          assert 'open_binary' in {t['name'] for t in tools}
+          assert all('inputSchema' in t for t in tools)
+          print('Non-root REA 6.4.0 bridge: 170 MCP tools')
+          PY

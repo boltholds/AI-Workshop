@@ -1,0 +1,51 @@
+# Add after compose.yaml and compose.analysis.yaml. Private, single-operator REA.
+services:
+  gateway:
+    environment:
+      AI_WORKSHOP_REA_URL: http://rea-mcp:8796/mcp
+      AI_WORKSHOP_REA_TOKEN: ${AI_WORKSHOP_REA_TOKEN:?REA bridge token required}
+    volumes:
+      - rea-socket:/run/rea:ro
+  rea-mcp:
+    build:
+      context: ../..
+      dockerfile: rea/Dockerfile
+    environment:
+      AI_WORKSHOP_REA_TOKEN: ${AI_WORKSHOP_REA_TOKEN:?REA bridge token required}
+    volumes:
+      - type: bind
+        source: ${AI_WORKSHOP_REA_PROJECT_PATH:-/var/lib/ai-workshop/storage/projects/parasolid-research}
+        target: /workspace/target
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AI_WORKSHOP_GHIDRA_ROOT:-/opt/ai-workshop/ghidra}
+        target: /opt/ghidra
+        read_only: true
+        bind:
+          create_host_path: false
+      - rea-data:/data
+      - rea-socket:/run/rea
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=2g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 6g
+    cpus: 2
+    restart: unless-stopped
+    network_mode: none
+    healthcheck:
+      test: ["CMD", "python", "-m", "ai_workshop.rea.health"]
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  rea-data:
+  rea-socket:

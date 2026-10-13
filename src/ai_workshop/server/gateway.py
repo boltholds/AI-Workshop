@@ -55,6 +55,17 @@ def build_server_gateway_runtime(
         raise ValueError("analysis worker requires explicit project-file tool enablement")
     analysis = AnalysisClient(analysis_url, token=analysis_token) if analysis_url and analysis_token else None
 
+    rea_url = os.environ.get("AI_WORKSHOP_REA_URL")
+    rea_token = os.environ.get("AI_WORKSHOP_REA_TOKEN")
+    if bool(rea_url) != bool(rea_token):
+        raise ValueError("REA URL and token must be configured together")
+    rea_proxy = None
+    principal = None
+    if rea_url and rea_token:
+        from ai_workshop.rea.gateway import ServerOperator, build_rea_proxy
+        rea_proxy = build_rea_proxy(rea_url, rea_token, state_root)
+        principal = ServerOperator()
+
     server = build_server(
         None,
         token=None,
@@ -64,6 +75,8 @@ def build_server_gateway_runtime(
         credential_service=credentials,
         project_files_service=files,
         analysis_service=analysis,
+        mcp_proxy_service=rea_proxy,
+        principal_resolver=principal,
     )
     return ServerGatewayRuntime(
         server=server,

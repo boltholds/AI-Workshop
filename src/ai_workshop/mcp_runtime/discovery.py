@@ -19,7 +19,10 @@ class McpDiscoveryService:
         tools = tuple(
             McpToolDescriptor(
                 name=item["name"],
-                description=item.get("description", ""),
+                description=item.get("description") or "",
+                input_schema=item.get("inputSchema") or {"type": "object"},
+                output_schema=item.get("outputSchema") or {},
+                annotations=item.get("annotations") or {},
                 required_permissions=frozenset(
                     item.get("required_permissions", ())
                 ),
