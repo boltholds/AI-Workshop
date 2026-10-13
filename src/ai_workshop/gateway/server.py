@@ -196,6 +196,8 @@ def run_gateway(
     principal_resolver=None,
     mcp_proxy_service=None,
     mcp_promotion_registry=None,
+    project_files_service=None,
+    analysis_service=None,
 ) -> None:
     server = build_server(
         workspace_url,
