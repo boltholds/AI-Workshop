@@ -14,6 +14,10 @@ RUN python3 -m venv /opt/venv \
 COPY src/ai_workshop/analysis /opt/ai-workshop/src/ai_workshop/analysis
 COPY src/ai_workshop/__init__.py /opt/ai-workshop/src/ai_workshop/__init__.py
 COPY analysis/ghidra_scripts /opt/ai-workshop/ghidra_scripts
+# Docker COPY preserves source permissions. A hardened root checkout may be 0600/0700;
+# grant read/traverse permissions to the unprivileged worker without changing ownership
+# or allowing it to modify these application files at runtime.
+RUN chmod -R a+rX /opt/ai-workshop
 ENV PATH="/opt/venv/bin:/usr/local/cargo/bin:${PATH}" \
     RUSTUP_HOME=/usr/local/rustup \
     PYTHONPATH=/opt/ai-workshop/src \
