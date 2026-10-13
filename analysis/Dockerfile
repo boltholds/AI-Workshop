@@ -1,6 +1,6 @@
 # The worker never receives WAI state/credentials or the Docker socket.
 FROM rust:1.90-bookworm AS rust-toolchain
-FROM eclipse-temurin:21-jre-noble
+FROM eclipse-temurin:21-jdk-noble
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-venv binutils file ca-certificates \
