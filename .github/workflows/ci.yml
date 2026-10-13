@@ -398,3 +398,25 @@ jobs:
           assert all('inputSchema' in t for t in tools)
           print('Non-root REA 6.4.0 bridge: 170 MCP tools')
           PY
+      - name: Restore gateway snapshot from a local rollback image without pulling
+        run: |
+          python3 - <<'PY'
+          import importlib.util, json, subprocess
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('rollout', 'scripts/rea-rollout-config.py')
+          rollout = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(rollout)
+          old_image = subprocess.check_output(['docker', 'image', 'inspect', '--format', '{{.Id}}', 'wai-rea:ci'], text=True).strip()
+          config = {'name': 'wai-rollback-ci', 'services': {'gateway': {
+              'image': 'wai-rea:ci', 'network_mode': 'none', 'read_only': True,
+              'entrypoint': ['python', '-c', 'import time; time.sleep(120)'], 'command': [],
+          }}}
+          frozen = rollout.freeze_for_rollback(config, old_image)
+          subprocess.run(['docker', 'image', 'tag', old_image, frozen['services']['gateway']['image']], check=True)
+          Path('/tmp/wai-rollback.json').write_text(json.dumps(frozen))
+          Path('/tmp/wai-rollback-image').write_text(old_image)
+          PY
+          trap 'docker compose -f /tmp/wai-rollback.json down >/dev/null 2>&1 || true' EXIT
+          docker compose -f /tmp/wai-rollback.json up -d --no-deps --no-build --pull never --wait --wait-timeout 30 gateway
+          GATEWAY_ID="$(docker compose -f /tmp/wai-rollback.json ps -q gateway)"
+          test "$(docker inspect --format '{{.Image}}' "$GATEWAY_ID")" = "$(cat /tmp/wai-rollback-image)"

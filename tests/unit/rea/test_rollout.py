@@ -87,10 +87,11 @@ def test_rollback_snapshot_preserves_secrets_and_original_options():
     config, _, _ = fixture()
     config['services']['gateway']['environment']['TOKEN'] = 'literal$SECRET'
     config['services']['gateway']['build'] = {'context': '/repo'}
-    frozen = load_helper().freeze_for_rollback(config, 'sha256:old')
+    frozen = load_helper().freeze_for_rollback(config, 'sha256:' + 'a' * 64)
     gateway = frozen['services']['gateway']
     assert gateway['environment']['TOKEN'] == 'literal$$SECRET'
-    assert gateway['image'] == 'sha256:old'
+    assert gateway['image'] == 'ai-workshop-gateway-rollback:' + 'a' * 64
+    assert gateway['pull_policy'] == 'never'
     assert 'build' not in gateway
     assert gateway['ports'] == config['services']['gateway']['ports']
     assert gateway['networks'] == config['services']['gateway']['networks']

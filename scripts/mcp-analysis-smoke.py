@@ -13,7 +13,7 @@ REQUIRED = {
 }
 
 
-def post(method: str, request_id: int | None, params: dict | None = None) -> dict:
+def post(method: str, request_id: int | None, params: dict | None = None, *, timeout: float = 12) -> dict:
     payload = {'jsonrpc': '2.0', 'method': method}
     if request_id is not None:
         payload['id'] = request_id
@@ -28,7 +28,7 @@ def post(method: str, request_id: int | None, params: dict | None = None) -> dic
             'MCP-Protocol-Version': '2025-06-18',
         },
     )
-    with urllib.request.urlopen(request, timeout=12) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read().decode('utf-8')
     if not body.strip():
         return {}

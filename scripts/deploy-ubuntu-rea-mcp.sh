@@ -44,9 +44,15 @@ fi
 backup="$(mktemp -d "$ROOT/.workshop-rea-rollback.XXXXXXXX")"
 cp "$staging/gateway.json" "$backup/gateway-before.json"
 cp "$staging/rollback.json" "$backup/compose-before.json"
+rollback_image="ai-workshop-gateway-rollback:${old_image#sha256:}"
+docker image tag "$old_image" "$rollback_image"
+[[ "$(docker image inspect --format '{{.Id}}' "$rollback_image")" == "$old_image" ]] || exit 1
 rollback() {
   echo "Restoring verified prior gateway config and image; private metadata: $backup" >&2
-  docker compose -f "$backup/compose-before.json" up -d --no-deps --no-build gateway
+  if ! docker compose -f "$backup/compose-before.json" up -d --no-deps --no-build --pull never --wait --wait-timeout 120 gateway; then
+    echo "Rollback failed; leaving REA and private recovery metadata intact: $backup" >&2
+    return 1
+  fi
   "${full[@]}" rm -sf rea-mcp
 }
 "${full[@]}" build rea-mcp gateway
@@ -59,6 +65,7 @@ if ! "${full[@]}" up -d --no-deps --no-build --wait --wait-timeout 120 gateway; 
   rollback; exit 1
 fi
 if ! python3 scripts/mcp-rea-smoke.py --url "$smoke_url"; then
+  "${full[@]}" logs --no-color --tail 200 gateway rea-mcp > "$backup/rollout-failure.log" 2>&1 || true
   rollback; exit 1
 fi
 trap - INT TERM
