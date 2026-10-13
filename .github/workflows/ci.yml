@@ -28,18 +28,43 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Simulate root-owned 0600/0700 checkout permissions
+        run: |
+          chmod -R go-rwx src/ai_workshop/analysis analysis/ghidra_scripts
+          chmod go-rwx src/ai_workshop/__init__.py
       - name: Build isolated worker
         run: docker build -f analysis/Dockerfile -t wai-analysis-worker:ci .
-      - name: Validate full JDK, Rust and Python worker
+      - name: Validate full JDK and non-root application access
         run: |
-          docker run --rm --entrypoint /bin/sh \
+          docker run --rm --read-only --cap-drop ALL --user 10001:10001 --entrypoint /bin/sh \
             -e AI_WORKSHOP_ANALYSIS_TOKEN=ci-only-token \
             wai-analysis-worker:ci -c '
+              test "$(id -u)" = "10001" &&
+              test -r /opt/ai-workshop/src/ai_workshop/analysis/__init__.py &&
+              test -r /opt/ai-workshop/ghidra_scripts/ExportSummary.py &&
+              test -x /opt/ai-workshop/src/ai_workshop/analysis &&
               java -version &&
               javac -version &&
               cargo --version &&
-              python -c "from ai_workshop.analysis.app import load_app; app = load_app(); print(app.title)"
+              python -c "from ai_workshop.analysis.app import load_app; app = load_app(); assert any(r.path == \"/health\" for r in app.routes); print(app.title)"
             '
+      - name: Start worker as UID 10001 and probe real HTTP health endpoint
+        run: |
+          docker run --detach --name wai-analysis-ci \
+            --read-only --cap-drop ALL --user 10001:10001 \
+            --tmpfs /tmp:rw,nosuid,size=128m \
+            -e AI_WORKSHOP_ANALYSIS_TOKEN=ci-only-token \
+            wai-analysis-worker:ci
+          trap 'docker rm -f wai-analysis-ci >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 30); do
+            if docker exec wai-analysis-ci python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8795/health", timeout=2)' 2>/dev/null; then
+              echo "Worker health endpoint responded as unprivileged user"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs wai-analysis-ci
+          exit 1
 
   docker-smoke:
     runs-on: ubuntu-latest
