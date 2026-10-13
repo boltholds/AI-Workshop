@@ -28,17 +28,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Simulate root-owned 0600/0700 checkout permissions
+        run: |
+          chmod -R go-rwx src/ai_workshop/analysis analysis/ghidra_scripts
+          chmod go-rwx src/ai_workshop/__init__.py
       - name: Build isolated worker
         run: docker build -f analysis/Dockerfile -t wai-analysis-worker:ci .
-      - name: Validate full JDK, Rust and Python worker
+      - name: Validate full JDK and non-root application access
         run: |
-          docker run --rm --entrypoint /bin/sh \
+          docker run --rm --read-only --cap-drop ALL --user 10001:10001 --entrypoint /bin/sh \
             -e AI_WORKSHOP_ANALYSIS_TOKEN=ci-only-token \
             wai-analysis-worker:ci -c '
+              test "$(id -u)" = "10001" &&
+              test -r /opt/ai-workshop/src/ai_workshop/analysis/__init__.py &&
+              test -r /opt/ai-workshop/ghidra_scripts/ExportSummary.py &&
+              test -x /opt/ai-workshop/src/ai_workshop/analysis &&
               java -version &&
               javac -version &&
               cargo --version &&
-              python -c "from ai_workshop.analysis.app import load_app; app = load_app(); print(app.title)"
+              python -c "from fastapi.testclient import TestClient; from ai_workshop.analysis.app import load_app; app = load_app(); assert TestClient(app).get(\x27/health\x27).json() == {\x27status\x27: \x27ok\x27}; print(app.title)"
             '
 
   docker-smoke:
