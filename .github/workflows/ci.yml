@@ -46,8 +46,25 @@ jobs:
               java -version &&
               javac -version &&
               cargo --version &&
-              python -c "from fastapi.testclient import TestClient; from ai_workshop.analysis.app import load_app; app = load_app(); assert TestClient(app).get(\"/health\").json() == {\"status\": \"ok\"}; print(app.title)"
+              python -c "from ai_workshop.analysis.app import load_app; app = load_app(); assert any(r.path == \"/health\" for r in app.routes); print(app.title)"
             '
+      - name: Start worker as UID 10001 and probe real HTTP health endpoint
+        run: |
+          docker run --detach --name wai-analysis-ci \
+            --read-only --cap-drop ALL --user 10001:10001 \
+            --tmpfs /tmp:rw,nosuid,size=128m \
+            -e AI_WORKSHOP_ANALYSIS_TOKEN=ci-only-token \
+            wai-analysis-worker:ci
+          trap 'docker rm -f wai-analysis-ci >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 30); do
+            if docker exec wai-analysis-ci python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8795/health", timeout=2)' 2>/dev/null; then
+              echo "Worker health endpoint responded as unprivileged user"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs wai-analysis-ci
+          exit 1
 
   docker-smoke:
     runs-on: ubuntu-latest
