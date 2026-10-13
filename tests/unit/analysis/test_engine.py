@@ -60,3 +60,53 @@ def test_analysis_worker_authentication(engine):
     assert client.post('/v1/shell/exec', headers=auth, json={
         'project_id': 'demo', 'argv': ['bash', '-c', 'id']
     }).status_code == 400
+
+
+def test_queued_ghidra_job_persists_result_across_worker_restart(tmp_path):
+    import time
+
+    projects = tmp_path / 'projects'
+    research = projects / 'demo'
+    research.mkdir(parents=True)
+    results = tmp_path / 'results'
+    results.mkdir()
+    binary = bytearray(128)
+    binary[:2] = b'MZ'
+    binary[0x3c:0x40] = (64).to_bytes(4, 'little')
+    binary[64:68] = b'PE\x00\x00'
+    (research / 'sample.dll').write_bytes(binary)
+
+    home = tmp_path / 'ghidra'
+    headless = home / 'support' / 'analyzeHeadless'
+    headless.parent.mkdir(parents=True)
+    headless.write_text(
+        '#!/usr/bin/env python3\n'
+        'import json, sys\n'
+        'pos = sys.argv.index("-postScript")\n'
+        'with open(sys.argv[pos+2], "w") as fd:\n'
+        '    json.dump({"function_count": 1, "functions": []}, fd)\n'
+    )
+    headless.chmod(0o755)
+    scripts = tmp_path / 'scripts'
+    scripts.mkdir()
+    (scripts / 'ExportSummary.py').write_text('# sample')
+    engine = AnalysisEngine(
+        projects_root=projects, results_root=results,
+        ghidra_home=home, script_path=scripts,
+    )
+    started = engine.binary_analyze('demo', 'sample.dll')
+    assert started['status'] == 'queued'
+    assert len(started['sha256']) == 64
+    for _ in range(100):
+        status = engine.analysis_get_results('demo', started['analysis_id'])
+        if status['status'] in ('completed', 'failed'):
+            break
+        time.sleep(0.05)
+    assert status['status'] == 'completed', status
+    assert status['summary']['function_count'] == 1
+
+    again = AnalysisEngine(
+        projects_root=projects, results_root=results,
+        ghidra_home=home, script_path=scripts,
+    )
+    assert again.analysis_get_results('demo', started['analysis_id'])['status'] == 'completed'
