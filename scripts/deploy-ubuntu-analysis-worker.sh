@@ -66,6 +66,21 @@ docker ps --format 'table {{.Names}}\t{{.Status}}'
   docker compose --env-file "$ENV_FILE" -f "$BASE" -f "$OVERLAY" config --quiet
 )
 
+# Ensure the updated gateway will see the SAME host data directory as the old
+# gateway. This is critical when legacy deployments used custom bind mounts.
+existing_storage="$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/ai-workshop/storage"}}{{.Source}}{{end}}{{end}}' "$gateway_container")"
+expected_storage="$(
+  (
+    export AI_WORKSHOP_ANALYSIS_TOKEN='preflight-only-token-not-used-for-deployment'
+    docker compose --env-file "$ENV_FILE" -f "$BASE" -f "$OVERLAY" config --format json
+  ) | python3 -c 'import json,sys; x=json.load(sys.stdin); v=[i["source"] for i in x["services"]["gateway"]["volumes"] if i["target"]=="/var/lib/ai-workshop/storage"]; print(v[0] if len(v)==1 else "")'
+)"
+if [[ -z "$existing_storage" || -z "$expected_storage" ||
+      "$(readlink -f "$existing_storage")" != "$(readlink -f "$expected_storage")" ]]; then
+  echo 'Existing gateway storage mount differs from the candidate rollout; refusing changes.' >&2
+  exit 1
+fi
+
 if [[ "$MODE" == '--preflight' ]]; then
   echo 'Preflight succeeded. --apply will back up state and update only gateway + analysis-worker.'
   exit 0
