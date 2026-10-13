@@ -44,12 +44,15 @@ def build_server_gateway_runtime(
     )
     git = GitRepositoryService(projects, credentials)
     destructive_git = GitDestructiveService(git)
-    files = ProjectFileService(projects)
+    project_files_enabled = os.environ.get("AI_WORKSHOP_ENABLE_PROJECT_FILES", "0") == "1"
+    files = ProjectFileService(projects) if project_files_enabled else None
 
     analysis_url = os.environ.get("AI_WORKSHOP_ANALYSIS_URL")
     analysis_token = os.environ.get("AI_WORKSHOP_ANALYSIS_TOKEN")
     if bool(analysis_url) != bool(analysis_token):
         raise ValueError("analysis worker URL and token must be configured together")
+    if analysis_url and not project_files_enabled:
+        raise ValueError("analysis worker requires explicit project-file tool enablement")
     analysis = AnalysisClient(analysis_url, token=analysis_token) if analysis_url and analysis_token else None
 
     server = build_server(
