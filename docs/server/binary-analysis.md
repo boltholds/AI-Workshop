@@ -12,8 +12,9 @@ The optional binary analysis extension exposes these tools:
 | cargo_test | Run offline and locked Rust tests |
 
 **This extension is for projects and binaries you are authorized to inspect.**
-The first two tools are provided by the Server Mode gateway. The other four are
-exposed only when the isolated analysis worker URL and token are configured.
+None of these tools is exposed by default in Server Mode. All six become
+available when the optional analysis overlay is explicitly enabled; its gateway
+environment opts in to project file access and configures the worker URL/token.
 
 ## Isolation
 
