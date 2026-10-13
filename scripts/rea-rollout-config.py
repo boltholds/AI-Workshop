@@ -17,8 +17,24 @@ def validate_gateway(config, live, image):
     if actual_env != expected_env:
         raise ValueError('Live gateway environment differs from current Compose configuration')
     for field, key in [('Cmd', 'command'), ('Entrypoint', 'entrypoint'), ('User', 'user')]:
-        if actual.get(field) != service.get(key, image_config.get(field)):
-            raise ValueError('Live gateway command/user differs from current Compose configuration')
+        expected = service.get(key)
+        # Compose null means inherit; an explicit empty command/entrypoint
+        # clears the image default instead. Explicit entrypoints suppress CMD.
+        if expected is None or (field == 'User' and expected == ''):
+            expected = image_config.get(field)
+            if field == 'Cmd' and service.get('entrypoint') is not None:
+                expected = None
+        observed = actual.get(field)
+        if field == 'User':
+            expected, observed = expected or '', observed or ''
+        else:
+            expected, observed = expected or [], observed or []
+        if observed != expected:
+            raise ValueError(
+                f'Live gateway {field} differs from current Compose configuration: '
+                f'live={observed!r}, expected={expected!r}; '
+                f'compose={service.get(key)!r}, image={image_config.get(field)!r}'
+            )
     expected_mounts = {}
     for volume in service.get('volumes', []):
         kind = volume['type']
