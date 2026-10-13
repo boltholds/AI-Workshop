@@ -3,6 +3,7 @@
 services:
   gateway:
     environment:
+      AI_WORKSHOP_ENABLE_PROJECT_FILES: "1"
       AI_WORKSHOP_ANALYSIS_URL: http://analysis-worker:8795
       AI_WORKSHOP_ANALYSIS_TOKEN: ${AI_WORKSHOP_ANALYSIS_TOKEN:?analysis worker token required}
     networks:
