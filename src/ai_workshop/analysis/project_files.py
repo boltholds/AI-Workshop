@@ -38,6 +38,11 @@ class ProjectFileService:
         root = Path(project.path).resolve(strict=True)
         if not root.is_dir():
             raise ValueError('project checkout unavailable')
+        # Refuse root-level symlink escapes, even if the project was previously registered.
+        if hasattr(self.projects, 'storage'):
+            managed = self.projects.storage.projects_root.resolve(strict=True)
+            if not root.is_relative_to(managed):
+                raise ValueError('project checkout escapes managed storage')
         return root
 
     def read(self, project_id: str, path: str) -> str:
