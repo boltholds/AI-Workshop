@@ -24,6 +24,23 @@ jobs:
           bash -n scripts/bootstrap.sh scripts/tunnel.sh scripts/server-bootstrap.sh
           pwsh -NoProfile -Command '$files=@("scripts/bootstrap.ps1","scripts/tunnel.ps1","scripts/server-bootstrap.ps1"); foreach($file in $files){$tokens=$null; $errors=$null; [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors) | Out-Null; if($errors.Count -gt 0){$errors | Format-List | Out-String | Write-Error; exit 1}}'
 
+  analysis-worker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated worker
+        run: docker build -f analysis/Dockerfile -t wai-analysis-worker:ci .
+      - name: Validate full JDK, Rust and Python worker
+        run: |
+          docker run --rm --entrypoint /bin/sh \
+            -e AI_WORKSHOP_ANALYSIS_TOKEN=ci-only-token \
+            wai-analysis-worker:ci -c '
+              java -version &&
+              javac -version &&
+              cargo --version &&
+              python -c "from ai_workshop.analysis.app import load_app; app = load_app(); print(app.title)"
+            '
+
   docker-smoke:
     runs-on: ubuntu-latest
     env:
