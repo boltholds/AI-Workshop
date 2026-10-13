@@ -25,18 +25,18 @@ def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_regi
     @server.tool(name="mcp.servers_list")
     def mcp_servers_list() -> list[dict[str, object]]:
         return [
-            item.model_dump(mode="json")
+            item.model_dump(mode="json", by_alias=True)
             for item in safe(proxy.servers_list, actor())
         ]
 
     @server.tool(name="mcp.server_get")
     def mcp_server_get(server_id: str) -> dict[str, object]:
-        return safe(proxy.server_get, actor(), server_id).model_dump(mode="json")
+        return safe(proxy.server_get, actor(), server_id).model_dump(mode="json", by_alias=True)
 
     @server.tool(name="mcp.tools_list")
     def mcp_tools_list(server_id: str) -> list[dict[str, object]]:
         return [
-            item.model_dump(mode="json")
+            item.model_dump(mode="json", by_alias=True)
             for item in safe(proxy.tools_list, actor(), server_id)
         ]
 
@@ -57,7 +57,7 @@ def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_regi
     @server.tool(name="mcp.resources_list")
     def mcp_resources_list(server_id: str) -> list[dict[str, object]]:
         return [
-            item.model_dump(mode="json")
+            item.model_dump(mode="json", by_alias=True)
             for item in safe(proxy.resources_list, actor(), server_id)
         ]
 
@@ -68,7 +68,7 @@ def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_regi
     @server.tool(name="mcp.prompts_list")
     def mcp_prompts_list(server_id: str) -> list[dict[str, object]]:
         return [
-            item.model_dump(mode="json")
+            item.model_dump(mode="json", by_alias=True)
             for item in safe(proxy.prompts_list, actor(), server_id)
         ]
 
@@ -132,7 +132,7 @@ def register_mcp_runtime_tools(server, proxy, principal_resolver, promotion_regi
             )
             if ctx is not None and hasattr(ctx, "notify_tools_changed"):
                 await ctx.notify_tools_changed()
-            return promoted.model_dump(mode="json")
+            return promoted.model_dump(mode="json", by_alias=True)
 
         @server.tool(name="mcp.unpromote")
         async def mcp_unpromote(

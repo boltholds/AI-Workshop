@@ -1,0 +1,6 @@
+{
+  "name": "wai-rea-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": { "rea-agents": "6.4.0" }
+}

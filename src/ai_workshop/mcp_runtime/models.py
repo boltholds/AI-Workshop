@@ -65,6 +65,9 @@ class McpRegistration(_FrozenModel):
 class McpToolDescriptor(_FrozenModel):
     name: str = Field(min_length=1, max_length=200)
     description: str = ""
+    input_schema: dict[str, object] = Field(default_factory=lambda: {"type": "object"}, serialization_alias="inputSchema")
+    output_schema: dict[str, object] = Field(default_factory=dict, serialization_alias="outputSchema")
+    annotations: dict[str, object] = Field(default_factory=dict)
     required_permissions: frozenset[str] = frozenset()
 
 
