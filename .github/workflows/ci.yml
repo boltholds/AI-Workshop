@@ -46,7 +46,7 @@ jobs:
               java -version &&
               javac -version &&
               cargo --version &&
-              python -c "from fastapi.testclient import TestClient; from ai_workshop.analysis.app import load_app; app = load_app(); assert TestClient(app).get(\x27/health\x27).json() == {\x27status\x27: \x27ok\x27}; print(app.title)"
+              python -c "from fastapi.testclient import TestClient; from ai_workshop.analysis.app import load_app; app = load_app(); assert TestClient(app).get(\"/health\").json() == {\"status\": \"ok\"}; print(app.title)"
             '
 
   docker-smoke:
