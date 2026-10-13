@@ -24,6 +24,8 @@ def build_server(
     principal_resolver=None,
     mcp_proxy_service=None,
     mcp_promotion_registry=None,
+    project_files_service=None,
+    analysis_service=None,
 ):
     from mcp.server.mcpserver import MCPServer
 
@@ -96,6 +98,11 @@ def build_server(
         from ai_workshop.gateway.project_tools import register_project_tools
 
         register_project_tools(server, project_service)
+
+    if project_files_service is not None:
+        from ai_workshop.gateway.project_workspace_tools import register_project_workspace_tools
+
+        register_project_workspace_tools(server, project_files_service, analysis_service)
 
     if credential_service is not None:
         from ai_workshop.gateway.credential_tools import register_credential_tools
@@ -189,6 +196,8 @@ def run_gateway(
     principal_resolver=None,
     mcp_proxy_service=None,
     mcp_promotion_registry=None,
+    project_files_service=None,
+    analysis_service=None,
 ) -> None:
     server = build_server(
         workspace_url,
@@ -209,6 +218,8 @@ def run_gateway(
         principal_resolver=principal_resolver,
         mcp_proxy_service=mcp_proxy_service,
         mcp_promotion_registry=mcp_promotion_registry,
+        project_files_service=project_files_service,
+        analysis_service=analysis_service,
     )
     server.run(
         transport="streamable-http",

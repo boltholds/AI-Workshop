@@ -1,0 +1,48 @@
+# Opt-in worker overlay; never mount WAI state, host Docker socket or credentials.
+# Set AI_WORKSHOP_ANALYSIS_TOKEN to a fresh random secret in deploy/server/.env.
+services:
+  gateway:
+    environment:
+      AI_WORKSHOP_ENABLE_PROJECT_FILES: "1"
+      AI_WORKSHOP_ANALYSIS_URL: http://analysis-worker:8795
+      AI_WORKSHOP_ANALYSIS_TOKEN: ${AI_WORKSHOP_ANALYSIS_TOKEN:?analysis worker token required}
+    networks:
+      - server-control
+      - analysis-private
+  analysis-worker:
+    build:
+      context: ../..
+      dockerfile: analysis/Dockerfile
+    environment:
+      AI_WORKSHOP_ANALYSIS_TOKEN: ${AI_WORKSHOP_ANALYSIS_TOKEN:?analysis worker token required}
+      AI_WORKSHOP_PROJECTS_ROOT: /workspace/projects
+      AI_WORKSHOP_ANALYSIS_RESULTS: /analysis
+    volumes:
+      - ${AI_WORKSHOP_STORAGE_ROOT:-/var/lib/ai-workshop/storage}/projects:/workspace/projects:ro
+      - analysis-results:/analysis
+      - ${AI_WORKSHOP_GHIDRA_ROOT:-/opt/ai-workshop/ghidra}:/opt/ghidra:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=2g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 6g
+    cpus: 2
+    restart: unless-stopped
+    networks:
+      - analysis-private
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8795/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  analysis-results:
+
+networks:
+  analysis-private:
+    internal: true
