@@ -17,9 +17,13 @@ services:
       AI_WORKSHOP_ANALYSIS_TOKEN: ${AI_WORKSHOP_ANALYSIS_TOKEN:?analysis worker token required}
       AI_WORKSHOP_PROJECTS_ROOT: /workspace/projects
       AI_WORKSHOP_ANALYSIS_RESULTS: /analysis
+      AI_WORKSHOP_CARGO_CACHE_ROOT: /cargo-cache
+      AI_WORKSHOP_CARGO_LOCKS_ROOT: /cargo-lockfiles
     volumes:
       - ${AI_WORKSHOP_STORAGE_ROOT:-/var/lib/ai-workshop/storage}/projects:/workspace/projects:ro
       - analysis-results:/analysis
+      - cargo-cache:/cargo-cache:ro
+      - cargo-lockfiles:/cargo-lockfiles:ro
       - ${AI_WORKSHOP_GHIDRA_ROOT:-/opt/ai-workshop/ghidra}:/opt/ghidra:ro
     read_only: true
     tmpfs:
@@ -40,9 +44,35 @@ services:
       timeout: 3s
       retries: 10
 
+  cargo-prefetch:
+    profiles: ["cargo"]
+    build:
+      context: ../..
+      dockerfile: analysis/cargo-prefetch.Dockerfile
+    volumes:
+      - ${AI_WORKSHOP_STORAGE_ROOT:-/var/lib/ai-workshop/storage}/projects:/workspace/projects:ro
+      - cargo-cache:/cargo-cache
+      - cargo-lockfiles:/cargo-lockfiles
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=2g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 3g
+    cpus: 2
+    networks:
+      - cargo-egress
+
 volumes:
   analysis-results:
+  cargo-cache:
+  cargo-lockfiles:
 
 networks:
   analysis-private:
     internal: true
+  cargo-egress:
+    internal: false

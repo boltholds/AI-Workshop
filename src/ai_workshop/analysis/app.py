@@ -72,6 +72,8 @@ def load_app() -> FastAPI:
         AnalysisEngine(
             projects_root=Path(os.environ.get('AI_WORKSHOP_PROJECTS_ROOT', '/workspace/projects')),
             results_root=Path(os.environ.get('AI_WORKSHOP_ANALYSIS_RESULTS', '/analysis')),
+            cargo_cache_root=Path(os.environ.get('AI_WORKSHOP_CARGO_CACHE_ROOT', '/cargo-cache')),
+            cargo_locks_root=Path(os.environ.get('AI_WORKSHOP_CARGO_LOCKS_ROOT', '/cargo-lockfiles')),
         ),
         token=os.environ['AI_WORKSHOP_ANALYSIS_TOKEN'],
     )
