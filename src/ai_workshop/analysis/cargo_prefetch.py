@@ -57,7 +57,7 @@ def prefetch(
     # The original checkout (including its Git index) is never modified.
     with tempfile.TemporaryDirectory(prefix='wai-cargo-prefetch-') as temporary:
         scratch = Path(temporary) / 'project'
-        snapshot_project(source, scratch)
+        snapshot_project(source, scratch, manifest_path)
         prepared_manifest = scratch / manifest
         details = _cargo([
             'metadata', '--format-version', '1', '--no-deps',

@@ -208,7 +208,7 @@ class AnalysisEngine:
         with tempfile.TemporaryDirectory(prefix='wai-cargo-test-', dir=scratch_root) as directory:
             scratch = Path(directory)
             project_copy = scratch / 'project'
-            snapshot_project(source, project_copy)
+            snapshot_project(source, project_copy, relative.as_posix())
             copy_lock = project_copy / lock_relative
             copy_lock.parent.mkdir(parents=True, exist_ok=True)
             if copy_lock.exists() and copy_lock.read_bytes() != prepared_lock.read_bytes():

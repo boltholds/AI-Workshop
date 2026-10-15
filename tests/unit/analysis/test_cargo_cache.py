@@ -169,3 +169,135 @@ def test_manifest_path_never_escapes_project(tmp_path, bad):
     _, project = fixture_project(tmp_path)
     with pytest.raises(ValueError):
         dependency_fingerprint(project, bad)
+
+
+def test_unrelated_nested_cargo_project_does_not_affect_root(
+    tmp_path, monkeypatch,
+):
+    projects, project = fixture_project(tmp_path)
+    nested = project / 'validation-g2'
+    nested.mkdir()
+    validation = nested / 'Cargo.toml'
+    validation.write_text(
+        '[package]\nname="validation-g2"\nversion="0.41.0"\n'
+        '[lib]\npath="../src/lib.rs"\n'
+    )
+    baseline = dependency_fingerprint(project, 'Cargo.toml')
+    validation.write_text(
+        '[package]\nname="validation-g2"\nversion="0.42.0"\n'
+        '[lib]\npath="../src/lib.rs"\n'
+    )
+    assert dependency_fingerprint(project, 'Cargo.toml') == baseline
+
+    # This reproduces rustsolid's unreadable validation-g2/Cargo.toml.
+    validation.chmod(0o000)
+    try:
+        assert dependency_fingerprint(project, 'Cargo.toml') == baseline
+        copied = tmp_path / 'scratch'
+        snapshot_project(project, copied, 'Cargo.toml')
+        assert (copied / 'src/lib.rs').is_file()
+        assert not (copied / 'validation-g2').exists()
+    finally:
+        validation.chmod(0o644)
+
+
+def test_explicit_nested_manifest_uses_nested_crate_and_parent_sources(tmp_path):
+    _, project = fixture_project(tmp_path)
+    validation = project / 'validation-g2'
+    validation.mkdir()
+    (validation / 'Cargo.toml').write_text(
+        '[package]\nname="validation-g2"\nversion="0.41.0"\n'
+        '[lib]\npath="../src/lib.rs"\n'
+    )
+    baseline = dependency_fingerprint(project, 'validation-g2/Cargo.toml')
+    (validation / 'Cargo.toml').write_text(
+        '[package]\nname="validation-g2"\nversion="0.42.0"\n'
+        '[lib]\npath="../src/lib.rs"\n'
+    )
+    assert dependency_fingerprint(project, 'validation-g2/Cargo.toml') != baseline
+    snapshot_project(project, tmp_path / 'nested-snapshot',
+                     'validation-g2/Cargo.toml')
+    assert (tmp_path / 'nested-snapshot/validation-g2/Cargo.toml').is_file()
+    assert (tmp_path / 'nested-snapshot/src/lib.rs').is_file()
+
+
+def test_declared_local_path_dependency_is_included(tmp_path):
+    _, project = fixture_project(tmp_path)
+    package = project / 'crates' / 'support'
+    package.mkdir(parents=True)
+    (package / 'Cargo.toml').write_text(
+        '[package]\nname="support"\nversion="0.1.0"\n'
+    )
+    (project / 'Cargo.toml').write_text(
+        '[package]\nname="demo"\nversion="0.1.0"\n'
+        '[dependencies]\nsupport = {path="crates/support"}\n'
+    )
+    fingerprint = dependency_fingerprint(project, 'Cargo.toml')
+    (package / 'Cargo.toml').write_text(
+        '[package]\nname="support"\nversion="0.2.0"\n'
+    )
+    assert dependency_fingerprint(project, 'Cargo.toml') != fingerprint
+    snapshot_project(project, tmp_path / 'path-dep-snapshot')
+    assert (tmp_path / 'path-dep-snapshot/crates/support/Cargo.toml').is_file()
+
+
+def test_declared_workspace_members_affect_fingerprint(tmp_path):
+    _, project = fixture_project(tmp_path)
+    member = project / 'crates' / 'core'
+    member.mkdir(parents=True)
+    (member / 'Cargo.toml').write_text(
+        '[package]\nname="core"\nversion="0.1.0"\n'
+    )
+    (project / 'Cargo.toml').write_text(
+        '[workspace]\nmembers=["crates/*"]\n'
+    )
+    unrelated = project / 'validation-g2'
+    unrelated.mkdir()
+    (unrelated / 'Cargo.toml').write_text(
+        '[package]\nname="validation-g2"\nversion="0.41.0"\n'
+    )
+    fingerprint = dependency_fingerprint(project, 'Cargo.toml')
+    (member / 'Cargo.toml').write_text(
+        '[package]\nname="core"\nversion="0.2.0"\n'
+    )
+    assert dependency_fingerprint(project, 'Cargo.toml') != fingerprint
+    snapshot_project(project, tmp_path / 'workspace-snapshot')
+    assert (tmp_path / 'workspace-snapshot/crates/core/Cargo.toml').is_file()
+    assert not (tmp_path / 'workspace-snapshot/validation-g2').exists()
+
+
+def test_cargo_prefetch_ignores_unrelated_validation_manifest(
+    tmp_path, monkeypatch,
+):
+    projects, project = fixture_project(tmp_path)
+    nested = project / 'validation-g2'
+    nested.mkdir()
+    nested_manifest = nested / 'Cargo.toml'
+    nested_manifest.write_text('[package]\nname="unrelated"\nversion="0.1.0"\n')
+    nested_manifest.chmod(0o000)
+    cache = tmp_path / 'cache'
+    cache.mkdir()
+    locks = tmp_path / 'locks'
+    locks.mkdir()
+    calls = []
+
+    def fake_cargo(argv, *, cwd, cargo_home, capture=False):
+        calls.append(argv[0])
+        assert not (cwd / 'validation-g2').exists()
+        if argv[0] == 'metadata':
+            return SimpleNamespace(stdout=json.dumps({'workspace_root': str(cwd)}))
+        if argv[0] == 'generate-lockfile':
+            (cwd / 'Cargo.lock').write_text('locked')
+        return SimpleNamespace(stdout='')
+
+    try:
+        monkeypatch.setattr(cargo_prefetch, '_cargo', fake_cargo)
+        result = cargo_prefetch.prefetch(
+            'demo', 'Cargo.toml', projects_root=projects,
+            cache_root=cache, locks_root=locks,
+        )
+        assert calls == ['metadata', 'generate-lockfile', 'fetch']
+        assert (result / 'Cargo.lock').is_file()
+        assert not (project / 'Cargo.lock').exists()
+    finally:
+        nested_manifest.chmod(0o644)

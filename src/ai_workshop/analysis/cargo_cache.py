@@ -42,23 +42,130 @@ def manifest_relative_path(path: str) -> Path:
     return relative
 
 
-def _input_files(root: Path) -> list[Path]:
-    collected: list[Path] = []
-    for folder, dirs, files in os.walk(root, followlinks=False):
-        parent = Path(folder)
-        dirs[:] = sorted(
-            name for name in dirs
-            if name not in _SKIPPED_DIRS and not (parent / name).is_symlink()
-        )
-        for name in sorted(files):
-            entry = parent / name
-            if entry.is_symlink():
-                raise ValueError('Cargo input symlinks are not supported')
-            if name in ('Cargo.toml', 'Cargo.lock') or (
-                name in ('config', 'config.toml') and parent.name == '.cargo'
-            ):
-                collected.append(entry)
-    return sorted(collected)
+def _manifest_closure(root: Path, manifest_path: str) -> list[Path]:
+    """Discover only Cargo manifests in the selected package/workspace graph.
+
+    Arbitrary nested fixture projects are not dependencies. In particular, a
+    top-level crate must not read an unrelated validation/Cargo.toml.
+    """
+    import fnmatch
+    import glob
+    import tomllib
+
+    root = root.resolve(strict=True)
+    pending = [root / manifest_relative_path(manifest_path)]
+    manifests: set[Path] = set()
+
+    def bounded(candidate: Path) -> Path:
+        if candidate.is_symlink():
+            raise ValueError('Cargo manifest symlinks are not supported')
+        resolved = candidate.resolve(strict=False)
+        if not resolved.is_relative_to(root):
+            raise ValueError('Cargo path dependency escapes project checkout')
+        return resolved
+
+    def dependency_paths(table: object, base: Path) -> list[Path]:
+        if not isinstance(table, dict):
+            return []
+        return [
+            base / dependency['path'] / 'Cargo.toml'
+            for dependency in table.values()
+            if isinstance(dependency, dict) and isinstance(dependency.get('path'), str)
+        ]
+
+    while pending:
+        manifest = bounded(pending.pop())
+        if manifest in manifests:
+            continue
+        if not manifest.is_file() or manifest.name != 'Cargo.toml':
+            raise ValueError('Cargo dependency manifest missing')
+        if manifest.stat().st_size > _MAX_MANIFEST_SIZE:
+            raise ValueError('Cargo manifest exceeds limit')
+        data = tomllib.loads(manifest.read_text(encoding='utf-8'))
+        manifests.add(manifest)
+        base = manifest.parent
+
+        for key in ('dependencies', 'dev-dependencies', 'build-dependencies'):
+            pending.extend(dependency_paths(data.get(key), base))
+
+        for target in data.get('target', {}).values():
+            if isinstance(target, dict):
+                for key in ('dependencies', 'dev-dependencies', 'build-dependencies'):
+                    pending.extend(dependency_paths(target.get(key), base))
+
+        for section in ('patch', 'replace'):
+            tables = data.get(section, {})
+            if section == 'replace':
+                pending.extend(dependency_paths(tables, base))
+            elif isinstance(tables, dict):
+                for dependencies in tables.values():
+                    pending.extend(dependency_paths(dependencies, base))
+
+        workspace = data.get('workspace')
+        if isinstance(workspace, dict):
+            pending.extend(dependency_paths(workspace.get('dependencies'), base))
+            exclusions = workspace.get('exclude', [])
+            for pattern in workspace.get('members', []):
+                if not isinstance(pattern, str):
+                    raise ValueError('invalid Cargo workspace member pattern')
+                for matched in glob.glob(str(base / pattern), recursive=True):
+                    candidate = bounded(Path(matched))
+                    if not candidate.is_dir() or not (candidate / 'Cargo.toml').is_file():
+                        continue
+                    relative = candidate.relative_to(base).as_posix()
+                    if any(fnmatch.fnmatchcase(relative, exclude) for exclude in exclusions):
+                        continue
+                    pending.append(candidate / 'Cargo.toml')
+
+        package = data.get('package')
+        if isinstance(package, dict) and isinstance(package.get('workspace'), str):
+            pending.append(base / package['workspace'] / 'Cargo.toml')
+
+        # Cargo infers workspace membership from ancestor [workspace] tables.
+        # A parent [package] alone does not make a nested validation crate a
+        # workspace member.
+        ancestor = base.parent
+        while ancestor.is_relative_to(root):
+            parent_manifest = ancestor / 'Cargo.toml'
+            if parent_manifest.is_file() and parent_manifest not in manifests:
+                if parent_manifest.stat().st_size > _MAX_MANIFEST_SIZE:
+                    raise ValueError('Cargo ancestor manifest exceeds limit')
+                parent_data = tomllib.loads(parent_manifest.read_text(encoding='utf-8'))
+                if isinstance(parent_data.get('workspace'), dict):
+                    pending.append(parent_manifest)
+                    break
+            if ancestor == root:
+                break
+            ancestor = ancestor.parent
+
+    return sorted(manifests)
+
+
+def _input_files(root: Path, manifest_path: str) -> list[Path]:
+    """Fingerprint only dependency-relevant manifests, locks and config."""
+    root = root.resolve(strict=True)
+    found: set[Path] = set()
+    for manifest in _manifest_closure(root, manifest_path):
+        found.add(manifest)
+        lock = manifest.parent / 'Cargo.lock'
+        if lock.is_file():
+            found.add(lock)
+
+        # Cargo config can affect dependency sources and index resolution.
+        folder = manifest.parent
+        while folder.is_relative_to(root):
+            for config_name in ('config', 'config.toml'):
+                config = folder / '.cargo' / config_name
+                if config.is_file():
+                    found.add(config)
+            if folder == root:
+                break
+            folder = folder.parent
+
+    for entry in found:
+        if entry.is_symlink():
+            raise ValueError('Cargo input symlinks are not supported')
+    return sorted(found)
 
 
 def dependency_fingerprint(root: Path, manifest_path: str) -> str:
@@ -68,9 +175,7 @@ def dependency_fingerprint(root: Path, manifest_path: str) -> str:
         raise ValueError('Cargo.toml missing or symlinked')
     digest = hashlib.sha256()
     digest.update(relative.as_posix().encode('utf-8') + b'\x00')
-    files = _input_files(root)
-    if not files:
-        raise ValueError('no Cargo manifests')
+    files = _input_files(root, manifest_path)
     for entry in files:
         if entry.stat().st_size > _MAX_MANIFEST_SIZE:
             raise ValueError('Cargo manifest/configuration exceeds limit')
@@ -79,34 +184,41 @@ def dependency_fingerprint(root: Path, manifest_path: str) -> str:
     return digest.hexdigest()
 
 
-def snapshot_project(root: Path, destination: Path) -> None:
-    """Copy read-only project data to private scratch, without following symlinks.
+def snapshot_project(
+    root: Path, destination: Path, manifest_path: str = 'Cargo.toml',
+) -> None:
+    """Copy the selected crate's source, excluding unrelated nested projects.
 
-    Deliberately excludes Git internals, build outputs and private local settings.
-    A project with remaining symlinks is rejected rather than escaping a mount.
+    Cargo tests run against a private snapshot. The original project is
+    untouched and standalone validation crates are prepared separately.
     """
     if destination.exists():
         raise ValueError('snapshot destination already exists')
+    root = root.resolve(strict=True)
+    participating = {m.parent for m in _manifest_closure(root, manifest_path)}
 
     def ignored(directory: str, names: list[str]) -> set[str]:
-        return {
-            name for name in names
-            if name in _SKIPPED_DIRS or name in _SKIPPED_FILES
-        }
-
-    for folder, dirs, files in os.walk(root, followlinks=False):
-        parent = Path(folder)
-        dirs[:] = [d for d in dirs if d not in _SKIPPED_DIRS]
-        for entry_name in dirs + files:
-            if (parent / entry_name).is_symlink() and (
-                entry_name not in _SKIPPED_DIRS and entry_name not in _SKIPPED_FILES
-            ):
+        parent = Path(directory)
+        excluded: set[str] = set()
+        for name in names:
+            entry = parent / name
+            if name in _SKIPPED_DIRS or name in _SKIPPED_FILES:
+                excluded.add(name)
+                continue
+            if entry.is_symlink():
                 raise ValueError('project symlinks are not supported in Cargo snapshots')
+            if entry.is_dir() and (entry / 'Cargo.toml').is_file():
+                # Keep declared path dependencies and workspace members,
+                # including any ancestors needed to reach a nested member.
+                if not any(
+                    package_dir == entry or package_dir.is_relative_to(entry)
+                    for package_dir in participating
+                ):
+                    excluded.add(name)
+        return excluded
 
     shutil.copytree(root, destination, ignore=ignored, symlinks=False)
     for folder, dirs, files in os.walk(destination):
-        # Source files created by a restrictive atomic writer may still be 0600.
-        # A private scratch copy is owned by this process and never changes source.
         for name in files:
             dest = Path(folder) / name
             dest.chmod(stat.S_IMODE(dest.stat().st_mode) | 0o600)
