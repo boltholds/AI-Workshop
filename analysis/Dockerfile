@@ -3,7 +3,7 @@ FROM rust:1.90-bookworm AS rust-toolchain
 FROM eclipse-temurin:21-jdk-noble
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-venv binutils file ca-certificates \
+    && apt-get install -y --no-install-recommends python3 python3-venv binutils file ca-certificates build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=rust-toolchain /usr/local/cargo/bin /usr/local/cargo/bin
 COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
