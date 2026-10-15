@@ -1,0 +1,86 @@
+name: Offline Cargo smoke
+
+on:
+  pull_request:
+    paths:
+      - "src/ai_workshop/analysis/**"
+      - "analysis/**"
+      - "deploy/server/compose.analysis.yaml"
+      - ".github/workflows/cargo-offline-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/ai_workshop/analysis/**"
+      - "analysis/**"
+      - "deploy/server/compose.analysis.yaml"
+      - ".github/workflows/cargo-offline-smoke.yml"
+
+jobs:
+  cargo-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build both isolated Cargo images
+        run: |
+          docker build -f analysis/cargo-prefetch.Dockerfile -t wai-prefetch:ci .
+          docker build -f analysis/Dockerfile -t wai-worker:ci .
+      - name: Make a real Rust crate requiring earcutr
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wai-cargo-projects/demo/src"
+          cat > "$RUNNER_TEMP/wai-cargo-projects/demo/Cargo.toml" <<'EOF'
+          [package]
+          name = "wai-cargo-smoke"
+          version = "0.1.0"
+          edition = "2021"
+          [dependencies]
+          earcutr = "0.5.0"
+          EOF
+          cat > "$RUNNER_TEMP/wai-cargo-projects/demo/src/lib.rs" <<'EOF'
+          pub fn triangle() -> u32 { 3 }
+          #[cfg(test)]
+          mod tests {
+              #[test]
+              fn triangle() { assert_eq!(super::triangle(), 3); }
+          }
+          EOF
+          docker volume create "wai-cargo-cache-$GITHUB_RUN_ID"
+          docker volume create "wai-cargo-locks-$GITHUB_RUN_ID"
+      - name: Prefetch crates with network access and a read-only checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network bridge --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true --user 10001:10001 \
+            --tmpfs /tmp:rw,nosuid,size=1g \
+            --mount "type=bind,source=$RUNNER_TEMP/wai-cargo-projects,target=/workspace/projects,readonly" \
+            --mount "type=volume,source=wai-cargo-cache-$GITHUB_RUN_ID,target=/cargo-cache" \
+            --mount "type=volume,source=wai-cargo-locks-$GITHUB_RUN_ID,target=/cargo-lockfiles" \
+            wai-prefetch:ci demo
+          test ! -e "$RUNNER_TEMP/wai-cargo-projects/demo/Cargo.lock"
+      - name: Run Cargo tests offline with an immutable shared cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true --user 10001:10001 \
+            --tmpfs /tmp:rw,nosuid,size=2g --memory 4g \
+            --mount "type=bind,source=$RUNNER_TEMP/wai-cargo-projects,target=/workspace/projects,readonly" \
+            --mount "type=volume,source=wai-cargo-cache-$GITHUB_RUN_ID,target=/cargo-cache,readonly" \
+            --mount "type=volume,source=wai-cargo-locks-$GITHUB_RUN_ID,target=/cargo-lockfiles,readonly" \
+            --entrypoint python wai-worker:ci -c '
+          from pathlib import Path
+          from ai_workshop.analysis.engine import AnalysisEngine
+          Path("/tmp/results").mkdir()
+          engine = AnalysisEngine(projects_root=Path("/workspace/projects"), results_root=Path("/tmp/results"))
+          result = engine.cargo_test("demo", timeout_seconds=240)
+          print(result["stdout"])
+          raise SystemExit(result["exit_code"])
+          '
+          test ! -e "$RUNNER_TEMP/wai-cargo-projects/demo/Cargo.lock"
+      - name: Remove temporary CI volumes
+        if: always()
+        run: |
+          docker volume rm -f "wai-cargo-cache-$GITHUB_RUN_ID" || true
+          docker volume rm -f "wai-cargo-locks-$GITHUB_RUN_ID" || true
