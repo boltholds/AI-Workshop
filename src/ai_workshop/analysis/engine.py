@@ -202,7 +202,10 @@ class AnalysisEngine:
                 'timed_out': False, 'truncated': False,
             }
 
-        with tempfile.TemporaryDirectory(prefix='wai-cargo-test-') as directory:
+        # Rust build scripts and test binaries require an executable mount.
+        # Keep ordinary /tmp non-executable; use the dedicated isolated scratch.
+        scratch_root = os.environ.get('AI_WORKSHOP_CARGO_SCRATCH_ROOT') or None
+        with tempfile.TemporaryDirectory(prefix='wai-cargo-test-', dir=scratch_root) as directory:
             scratch = Path(directory)
             project_copy = scratch / 'project'
             snapshot_project(source, project_copy)

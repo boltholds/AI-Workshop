@@ -45,8 +45,9 @@ reviewing and committing Cargo.lock separately.
 Security: only prefetch trusted Rust manifests, registries and dependencies.
 The one-shot job has normal Docker egress (no registry-domain allowlist).
 The worker has no Internet access. Scratch excludes .git, .ssh, .env, target
-and other local state. Project symlinks are rejected. Its /tmp allocation is
-limited to 2 GiB, so very large builds can exhaust scratch space.
+and other local state. Project symlinks are rejected. Ordinary /tmp remains restricted; Rust build scripts and test binaries use a
+separate executable /cargo-build tmpfs, with nosuid and no network access.
+Each allocation is limited to 2 GiB, so very large builds can exhaust space.
 
 Do not use docker compose down -v: it deletes named volumes.
 

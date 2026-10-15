@@ -65,7 +65,9 @@ jobs:
           set -euo pipefail
           docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges:true --user 10001:10001 \
-            --tmpfs /tmp:rw,nosuid,size=2g --memory 4g \
+            --tmpfs /tmp:rw,nosuid,size=2g \
+            --tmpfs /cargo-build:rw,exec,nosuid,size=2g --memory 4g \
+            -e AI_WORKSHOP_CARGO_SCRATCH_ROOT=/cargo-build \
             --mount "type=bind,source=$RUNNER_TEMP/wai-cargo-projects,target=/workspace/projects,readonly" \
             --mount "type=volume,source=wai-cargo-cache-$GITHUB_RUN_ID,target=/cargo-cache,readonly" \
             --mount "type=volume,source=wai-cargo-locks-$GITHUB_RUN_ID,target=/cargo-lockfiles,readonly" \
