@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path, PurePosixPath
+import stat
 import tempfile
 
 
@@ -71,10 +72,20 @@ class ProjectFileService:
         target = resolve_relative(root, path)
         if target.is_dir():
             raise ValueError('cannot overwrite directory')
+        # mkstemp creates files with mode 0600. Preserve existing permissions,
+        # while making newly created project source files readable by workers.
+        # Never carry setuid/setgid/sticky bits onto replacement files.
+        mode = (
+            stat.S_IMODE(target.stat().st_mode) & 0o777
+            if target.exists()
+            else 0o644
+        )
         fd, temp = tempfile.mkstemp(prefix='.wai-', dir=target.parent)
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as stream:
                 stream.write(content)
+                stream.flush()
+                os.fchmod(stream.fileno(), mode)
             os.replace(temp, target)
         finally:
             if os.path.exists(temp):

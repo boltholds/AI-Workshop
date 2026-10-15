@@ -16,6 +16,13 @@ import time
 from uuid import uuid4
 
 from ai_workshop.analysis.project_files import resolve_relative
+from ai_workshop.analysis.cargo_cache import (
+    dependency_fingerprint,
+    manifest_relative_path,
+    read_prepared_lock,
+    snapshot_project,
+    stage_readonly_cache,
+)
 
 
 _PROJECT_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]*$')
@@ -45,11 +52,15 @@ class AnalysisEngine:
         results_root: Path,
         ghidra_home: Path = Path('/opt/ghidra'),
         script_path: Path = Path('/opt/ai-workshop/ghidra_scripts'),
+        cargo_cache_root: Path = Path('/cargo-cache'),
+        cargo_locks_root: Path = Path('/cargo-lockfiles'),
     ):
         self.projects_root = Path(projects_root).resolve(strict=True)
         self.results_root = Path(results_root).resolve(strict=True)
         self.ghidra_home = Path(ghidra_home)
         self.script_path = Path(script_path)
+        self.cargo_cache_root = Path(cargo_cache_root)
+        self.cargo_locks_root = Path(cargo_locks_root)
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='ghidra')
         self._jobs: set[str] = set()
 
@@ -70,6 +81,7 @@ class AnalysisEngine:
     def _run(
         self, argv: list[str], *, cwd: Path,
         timeout_seconds: float, abort_on_output_limit: bool = True,
+        environment: dict[str, str] | None = None,
     ) -> dict[str, object]:
         if not 1 <= timeout_seconds <= 900:
             raise ValueError('timeout must be between 1 and 900 seconds')
@@ -83,6 +95,9 @@ class AnalysisEngine:
             'CARGO_NET_OFFLINE': 'true',
             'GIT_TERMINAL_PROMPT': '0',
         }
+        if environment:
+            # Only internal callers supply overrides; no user-controlled env.
+            env.update(environment)
         exe = shutil.which(argv[0], path=env['PATH']) if not argv[0].startswith('/') else argv[0]
         if not exe or not Path(exe).is_file():
             raise ValueError('requested tool is not installed')
@@ -163,14 +178,54 @@ class AnalysisEngine:
         self, project_id: str, manifest_path: str = 'Cargo.toml',
         timeout_seconds: float = 300,
     ) -> dict[str, object]:
-        if Path(manifest_path).name != 'Cargo.toml':
-            raise ValueError('manifest must be named Cargo.toml')
-        manifest = self.binary_path(project_id, manifest_path)
-        with tempfile.TemporaryDirectory(prefix='wai-target-') as target:
+        # Cargo executes untrusted build scripts and tests; only prepare data
+        # from the networked prefetch job and run on a private, offline copy.
+        relative = manifest_relative_path(manifest_path)
+        source = self.project_root(project_id)
+        manifest = self.binary_path(project_id, relative.as_posix())
+        if not manifest.is_file():
+            raise ValueError('Cargo manifest is unavailable')
+        fingerprint = dependency_fingerprint(source, relative.as_posix())
+
+        try:
+            lock_relative, prepared_lock = read_prepared_lock(
+                self.cargo_locks_root, project_id, fingerprint, relative.as_posix(),
+            )
+        except (FileNotFoundError, ValueError, KeyError, OSError) as exc:
+            return {
+                'exit_code': 101,
+                'stdout': (
+                    'Cargo dependencies are not prepared for this manifest. '
+                    'Run the isolated cargo-prefetch service for project '
+                    f'{project_id}, then retry cargo_test. ({type(exc).__name__})\n'
+                ),
+                'timed_out': False, 'truncated': False,
+            }
+
+        # Rust build scripts and test binaries require an executable mount.
+        # Keep ordinary /tmp non-executable; use the dedicated isolated scratch.
+        scratch_root = os.environ.get('AI_WORKSHOP_CARGO_SCRATCH_ROOT') or None
+        with tempfile.TemporaryDirectory(prefix='wai-cargo-test-', dir=scratch_root) as directory:
+            scratch = Path(directory)
+            project_copy = scratch / 'project'
+            snapshot_project(source, project_copy)
+            copy_lock = project_copy / lock_relative
+            copy_lock.parent.mkdir(parents=True, exist_ok=True)
+            if copy_lock.exists() and copy_lock.read_bytes() != prepared_lock.read_bytes():
+                return {
+                    'exit_code': 101,
+                    'stdout': 'Cargo.lock differs from the prepared dependency snapshot.\n',
+                    'timed_out': False, 'truncated': False,
+                }
+            shutil.copy2(prepared_lock, copy_lock)
+            cargo_home = scratch / 'cargo-home'
+            stage_readonly_cache(self.cargo_cache_root, cargo_home)
             return self._run(
                 ['cargo', 'test', '--offline', '--locked',
-                 '--manifest-path', str(manifest), '--target-dir', target],
-                cwd=self.project_root(project_id), timeout_seconds=timeout_seconds,
+                 '--manifest-path', str(project_copy / relative),
+                 '--target-dir', str(scratch / 'target')],
+                cwd=project_copy, timeout_seconds=timeout_seconds,
+                environment={'CARGO_HOME': str(cargo_home)},
             )
 
     def _result_dir(self, project_id: str, analysis_id: str) -> Path:

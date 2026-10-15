@@ -3,14 +3,14 @@ FROM rust:1.90-bookworm AS rust-toolchain
 FROM eclipse-temurin:21-jdk-noble
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-venv binutils file ca-certificates \
+    && apt-get install -y --no-install-recommends python3 python3-venv binutils file ca-certificates build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=rust-toolchain /usr/local/cargo/bin /usr/local/cargo/bin
 COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
 RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir 'fastapi>=0.115,<1' 'uvicorn>=0.35,<1' 'pydantic>=2,<3' \
-    && mkdir -p /analysis /workspace/projects /opt/ai-workshop/ghidra_scripts \
-    && chown 10001:10001 /analysis
+    && mkdir -p /analysis /workspace/projects /opt/ai-workshop/ghidra_scripts /cargo-cache /cargo-lockfiles /cargo-build \
+    && chown 10001:10001 /analysis /cargo-cache /cargo-lockfiles /cargo-build
 COPY src/ai_workshop/analysis /opt/ai-workshop/src/ai_workshop/analysis
 COPY src/ai_workshop/__init__.py /opt/ai-workshop/src/ai_workshop/__init__.py
 COPY analysis/ghidra_scripts /opt/ai-workshop/ghidra_scripts
