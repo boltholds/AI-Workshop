@@ -1,5 +1,5 @@
 # The worker never receives WAI state/credentials or the Docker socket.
-FROM rust:1.90-bookworm AS rust-toolchain
+FROM rust:1.99-bookworm AS rust-toolchain
 FROM eclipse-temurin:21-jdk-noble
 
 RUN apt-get update \

@@ -26,6 +26,7 @@ def build_server(
     mcp_promotion_registry=None,
     project_files_service=None,
     analysis_service=None,
+    cargo_prefetch_service=None,
 ):
     from mcp.server.mcpserver import MCPServer
 
@@ -102,7 +103,10 @@ def build_server(
     if project_files_service is not None:
         from ai_workshop.gateway.project_workspace_tools import register_project_workspace_tools
 
-        register_project_workspace_tools(server, project_files_service, analysis_service)
+        register_project_workspace_tools(
+            server, project_files_service, analysis_service,
+            cargo_prefetch_service=cargo_prefetch_service,
+        )
 
     if credential_service is not None:
         from ai_workshop.gateway.credential_tools import register_credential_tools
@@ -198,6 +202,7 @@ def run_gateway(
     mcp_promotion_registry=None,
     project_files_service=None,
     analysis_service=None,
+    cargo_prefetch_service=None,
 ) -> None:
     server = build_server(
         workspace_url,
@@ -220,6 +225,7 @@ def run_gateway(
         mcp_promotion_registry=mcp_promotion_registry,
         project_files_service=project_files_service,
         analysis_service=analysis_service,
+        cargo_prefetch_service=cargo_prefetch_service,
     )
     server.run(
         transport="streamable-http",

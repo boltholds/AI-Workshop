@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-def register_project_workspace_tools(server, files, analysis) -> None:
+def register_project_workspace_tools(server, files, analysis, cargo_prefetch_service=None) -> None:
     """Project-only file IO and opt-in isolated binary inspection tools."""
 
     def safe(fn, *args, **kwargs):
@@ -21,6 +21,13 @@ def register_project_workspace_tools(server, files, analysis) -> None:
     @server.tool()
     def filesystem_write(project_id: str, path: str, content: str) -> dict[str, bool]:
         return safe(files.write, project_id, path, content)
+
+    if cargo_prefetch_service is not None:
+        @server.tool()
+        def cargo_prefetch(project_id: str, manifest_path: str = 'Cargo.toml') -> dict[str, object]:
+            """Prepare offline Cargo dependencies in an authenticated networked sidecar."""
+            safe(files._root, project_id)
+            return safe(cargo_prefetch_service.prepare, project_id, manifest_path)
 
     if analysis is None:
         return

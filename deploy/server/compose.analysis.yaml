@@ -6,9 +6,12 @@ services:
       AI_WORKSHOP_ENABLE_PROJECT_FILES: "1"
       AI_WORKSHOP_ANALYSIS_URL: http://analysis-worker:8795
       AI_WORKSHOP_ANALYSIS_TOKEN: ${AI_WORKSHOP_ANALYSIS_TOKEN:?analysis worker token required}
+      AI_WORKSHOP_CARGO_PREFETCH_URL: http://cargo-prefetch-api:8796
+      AI_WORKSHOP_CARGO_PREFETCH_TOKEN: ${AI_WORKSHOP_CARGO_PREFETCH_TOKEN:?cargo prefetch token required}
     networks:
       - server-control
       - analysis-private
+      - cargo-control
   analysis-worker:
     build:
       context: ../..
@@ -46,6 +49,51 @@ services:
       timeout: 3s
       retries: 10
 
+  # Separate, networked, authenticated prefetch sidecar. The gateway never
+  # receives a Docker socket or direct shell access through this operation.
+  cargo-prefetch-api:
+    build:
+      context: ../..
+      dockerfile: analysis/cargo-prefetch.Dockerfile
+    entrypoint:
+      - python
+      - -m
+      - uvicorn
+      - ai_workshop.analysis.cargo_prefetch_app:load_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8796"
+    environment:
+      AI_WORKSHOP_CARGO_PREFETCH_TOKEN: ${AI_WORKSHOP_CARGO_PREFETCH_TOKEN:?cargo prefetch token required}
+      AI_WORKSHOP_PROJECTS_ROOT: /workspace/projects
+      AI_WORKSHOP_CARGO_CACHE_ROOT: /cargo-cache
+      AI_WORKSHOP_CARGO_LOCKS_ROOT: /cargo-lockfiles
+    volumes:
+      - ${AI_WORKSHOP_STORAGE_ROOT:-/var/lib/ai-workshop/storage}/projects:/workspace/projects:ro
+      - cargo-cache:/cargo-cache
+      - cargo-lockfiles:/cargo-lockfiles
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=2g
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 3g
+    cpus: 2
+    restart: unless-stopped
+    networks:
+      - cargo-control
+      - cargo-egress
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8796/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   cargo-prefetch:
     profiles: ["cargo"]
     build:
@@ -75,6 +123,8 @@ volumes:
 
 networks:
   analysis-private:
+    internal: true
+  cargo-control:
     internal: true
   cargo-egress:
     internal: false

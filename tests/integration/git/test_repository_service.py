@@ -90,6 +90,22 @@ def test_clone_status_commit_and_log_against_local_bare_remote(tmp_path: Path):
     assert projects.get("demo").path == project.path
 
 
+def test_fresh_clone_commits_without_host_or_local_git_identity(tmp_path: Path):
+    remote, original = init_remote(tmp_path)
+    git, _ = service(tmp_path)
+    project = git.clone("fresh", str(remote))
+    assert run_git(project.path, "config", "--get", "user.email", check=False) == ""
+    (project.path / "README.md").write_text("from WAI\n", encoding="utf-8")
+    git.add("fresh", ["README.md"])
+
+    committed = git.commit("fresh", "new checkout change")
+    assert committed.commit_id != original
+    assert run_git(project.path, "show", "-s", "--format=%an <%ae>") == (
+        "AI Workshop <ai-workshop@users.noreply.github.com>"
+    )
+    assert git.status("fresh").porcelain == ""
+
+
 def test_diff_supports_worktree_and_staged_views(tmp_path: Path):
     remote, _ = init_remote(tmp_path)
     git, _ = service(tmp_path)

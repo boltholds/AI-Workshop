@@ -147,7 +147,20 @@ class GitRepositoryService:
         if not message or "\x00" in message:
             raise ValueError("commit message must not be empty or contain NUL")
         project = self._project(project_id)
-        self._run(project.path, ["commit", "-m", message])
+        # The server deliberately ignores host/global Git configuration.
+        # A new clone can therefore have no author or committer identity.
+        # Respect a repository-local identity when present; otherwise use
+        # an explicit, non-impersonating bot identity for this one commit.
+        author = self._run(project.path, ["var", "GIT_AUTHOR_IDENT"], check=False)
+        committer = self._run(project.path, ["var", "GIT_COMMITTER_IDENT"], check=False)
+        args = ["commit", "-m", message]
+        if author.returncode != 0 or committer.returncode != 0:
+            args = [
+                "-c", "user.name=AI Workshop",
+                "-c", "user.email=ai-workshop@users.noreply.github.com",
+                *args,
+            ]
+        self._run(project.path, args)
         commit_id = self._run(project.path, ["rev-parse", "HEAD"]).stdout.strip()
         return GitCommitResult(project_id=project_id, commit_id=commit_id)
 
