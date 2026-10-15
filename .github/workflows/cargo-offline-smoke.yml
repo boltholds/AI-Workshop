@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - "src/ai_workshop/analysis/**"
+      - "src/ai_workshop/gateway/cargo_prefetch_client.py"
+      - "src/ai_workshop/gateway/project_workspace_tools.py"
+      - "src/ai_workshop/gateway/server.py"
+      - "src/ai_workshop/server/gateway.py"
+      - "tests/unit/analysis/test_cargo_prefetch_api.py"
       - "analysis/**"
       - "deploy/server/compose.analysis.yaml"
       - ".github/workflows/cargo-offline-smoke.yml"
@@ -11,6 +16,11 @@ on:
     branches: [main]
     paths:
       - "src/ai_workshop/analysis/**"
+      - "src/ai_workshop/gateway/cargo_prefetch_client.py"
+      - "src/ai_workshop/gateway/project_workspace_tools.py"
+      - "src/ai_workshop/gateway/server.py"
+      - "src/ai_workshop/server/gateway.py"
+      - "tests/unit/analysis/test_cargo_prefetch_api.py"
       - "analysis/**"
       - "deploy/server/compose.analysis.yaml"
       - ".github/workflows/cargo-offline-smoke.yml"
@@ -47,6 +57,50 @@ jobs:
           EOF
           docker volume create "wai-cargo-cache-$GITHUB_RUN_ID"
           docker volume create "wai-cargo-locks-$GITHUB_RUN_ID"
+      - name: Exercise authenticated Cargo prefetch API (no Docker socket in sidecar)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name "wai-prefetch-api-$GITHUB_RUN_ID" \
+            --network bridge --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true --user 10001:10001 \
+            --tmpfs /tmp:rw,nosuid,size=1g \
+            --env AI_WORKSHOP_CARGO_PREFETCH_TOKEN=ci-test-token-000000000000000000 \
+            --mount "type=bind,source=$RUNNER_TEMP/wai-cargo-projects,target=/workspace/projects,readonly" \
+            --mount "type=volume,source=wai-cargo-cache-$GITHUB_RUN_ID,target=/cargo-cache" \
+            --mount "type=volume,source=wai-cargo-locks-$GITHUB_RUN_ID,target=/cargo-lockfiles" \
+            --entrypoint python wai-prefetch:ci \
+            -m uvicorn ai_workshop.analysis.cargo_prefetch_app:load_app \
+            --factory --host 127.0.0.1 --port 8796
+          docker exec -i "wai-prefetch-api-$GITHUB_RUN_ID" python - <<'PY'
+          import json, time, urllib.error, urllib.request
+          url = "http://127.0.0.1:8796/v1/cargo/prefetch"
+          for attempt in range(30):
+              try:
+                  urllib.request.urlopen("http://127.0.0.1:8796/health", timeout=1)
+                  break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise RuntimeError("Prefetch API never became healthy")
+          body = json.dumps({"project_id": "demo", "manifest_path": "Cargo.toml"}).encode()
+          try:
+              urllib.request.urlopen(urllib.request.Request(url, data=body, method="POST",
+                  headers={"Content-Type": "application/json"}), timeout=5)
+              raise AssertionError("No-token cargo prefetch must fail")
+          except urllib.error.HTTPError as error:
+              assert error.code == 401
+          req = urllib.request.Request(url, data=body, method="POST",
+              headers={"Authorization": "Bearer ci-test-token-000000000000000000",
+                       "Content-Type": "application/json"})
+          with urllib.request.urlopen(req, timeout=300) as response:
+              result = json.load(response)
+          assert result["prepared"] and result["project_id"] == "demo", result
+          assert len(result["dependency_fingerprint"]) == 64, result
+          print("networked cargo prefetch API prepared the offline cache")
+          PY
+          test ! -e "$RUNNER_TEMP/wai-cargo-projects/demo/Cargo.lock"
+
       - name: Prefetch crates with network access and a read-only checkout
         shell: bash
         run: |
@@ -84,5 +138,6 @@ jobs:
       - name: Remove temporary CI volumes
         if: always()
         run: |
+          docker rm -f "wai-prefetch-api-$GITHUB_RUN_ID" || true
           docker volume rm -f "wai-cargo-cache-$GITHUB_RUN_ID" || true
           docker volume rm -f "wai-cargo-locks-$GITHUB_RUN_ID" || true

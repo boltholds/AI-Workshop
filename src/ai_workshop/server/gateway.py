@@ -7,6 +7,8 @@ from pathlib import Path
 from ai_workshop.analysis.project_files import ProjectFileService
 from ai_workshop.credentials.store import CredentialStore
 from ai_workshop.gateway.analysis_client import AnalysisClient
+from ai_workshop.gateway.cargo_prefetch_client import CargoPrefetchClient
+from ai_workshop.gateway.cargo_prefetch_client import CargoPrefetchClient
 from ai_workshop.gateway.server import build_server
 from ai_workshop.git.destructive import GitDestructiveService
 from ai_workshop.git.service import GitRepositoryService
@@ -55,6 +57,28 @@ def build_server_gateway_runtime(
         raise ValueError("analysis worker requires explicit project-file tool enablement")
     analysis = AnalysisClient(analysis_url, token=analysis_token) if analysis_url and analysis_token else None
 
+    prefetch_url = os.environ.get("AI_WORKSHOP_CARGO_PREFETCH_URL")
+    prefetch_token = os.environ.get("AI_WORKSHOP_CARGO_PREFETCH_TOKEN")
+    if bool(prefetch_url) != bool(prefetch_token):
+        raise ValueError("Cargo prefetch URL and token must be configured together")
+    if prefetch_url and (not project_files_enabled or analysis is None):
+        raise ValueError("Cargo prefetch requires project files and the offline analysis worker")
+    prefetch = (
+        CargoPrefetchClient(prefetch_url, token=prefetch_token)
+        if prefetch_url and prefetch_token else None
+    )
+
+    prefetch_url = os.environ.get("AI_WORKSHOP_CARGO_PREFETCH_URL")
+    prefetch_token = os.environ.get("AI_WORKSHOP_CARGO_PREFETCH_TOKEN")
+    if bool(prefetch_url) != bool(prefetch_token):
+        raise ValueError("Cargo prefetch URL and token must be configured together")
+    if prefetch_url and (not project_files_enabled or analysis is None):
+        raise ValueError("Cargo prefetch requires project files and the offline analysis worker")
+    prefetch = (
+        CargoPrefetchClient(prefetch_url, token=prefetch_token)
+        if prefetch_url and prefetch_token else None
+    )
+
     rea_url = os.environ.get("AI_WORKSHOP_REA_URL")
     rea_token = os.environ.get("AI_WORKSHOP_REA_TOKEN")
     if bool(rea_url) != bool(rea_token):
@@ -75,6 +99,8 @@ def build_server_gateway_runtime(
         credential_service=credentials,
         project_files_service=files,
         analysis_service=analysis,
+        cargo_prefetch_service=prefetch,
+        cargo_prefetch_service=prefetch,
         mcp_proxy_service=rea_proxy,
         principal_resolver=principal,
     )
