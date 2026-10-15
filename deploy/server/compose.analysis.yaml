@@ -29,7 +29,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,size=2g
-      - /cargo-build:rw,exec,nosuid,size=2g
+      - /cargo-build:rw,exec,nosuid,mode=1777,size=2g
     security_opt:
       - no-new-privileges:true
     cap_drop:
