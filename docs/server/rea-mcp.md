@@ -31,6 +31,15 @@ docker compose --env-file deploy/server/.env \
 python3 scripts/mcp-rea-smoke.py --url http://127.0.0.1:8765/mcp
 ```
 
+The REA smoke check allows 120 seconds per HTTP response (`--timeout` overrides it).
+If an earlier rollout timed out and rollback failed, check the running services and
+run the smoke check again before attempting another installation. The first-install
+helper deliberately refuses to replace an existing REA deployment. Rollback now
+pins the previous image under a local `ai-workshop-gateway-rollback` tag and forbids
+pulling; a failed rollback preserves REA and its recovery metadata. Treat that
+metadata and captured failure logs as private. Do not remove the existing rootless
+runtime in response to Compose's orphan-container warning.
+
 For a custom `AI_WORKSHOP_MCP_PORT`, pass that port to the manual smoke check; the installer resolves it automatically.
 
 Refresh the connected WAI tool catalog if the new `mcp.*` tools are not visible after restart. The upstream tool surface then remains stable as REA tools are discovered.

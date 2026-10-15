@@ -74,8 +74,12 @@ def validate_gateway(config, live, image):
 
 def freeze_for_rollback(config, old_image):
     from copy import deepcopy
+    import re
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}', old_image):
+        raise ValueError('Expected an immutable local Docker image ID')
     result = deepcopy(config)
-    result['services']['gateway']['image'] = old_image
+    result['services']['gateway']['image'] = 'ai-workshop-gateway-rollback:' + old_image.split(':', 1)[1]
+    result['services']['gateway']['pull_policy'] = 'never'
     result['services']['gateway'].pop('build', None)
     def escape(value):
         if isinstance(value, str): return value.replace('$', '$$')
